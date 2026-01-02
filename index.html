@@ -12,466 +12,653 @@ import {
     BookmarkPlus, 
     History, 
     Trash2, 
-    Download 
+    Download,
+    RefreshCw
 } from 'lucide-react';
 
 // --- CONFIGURAÇÃO ---
-// COLE A URL DA SUA NOVA IMPLANTAÇÃO AQUI:
-const API_URL = 'https://script.google.com/macros/s/AKfycbzKmqFJ-g1mmXuyCPfETPLb_wFDjvDwFguy4lB6zUVOlVoCTOieLRPMF4C9T8xuiNq-mA/exec'; 
+// URL FORNECIDA PELO USUÁRIO
+const API_URL = 'https://script.google.com/macros/s/AKfycbzKmqFJ-g1mmXuyCPfETPLb_wFDjvDwFguy4lB6zUVOlVoCTOieLRPMF4C9T8xuiNq-mA/exec';
 
-// --- UTILITÁRIOS ---
-const iconMap = {
-    Dice5, LayoutDashboard, Cpu, Save, Database, AlertTriangle, 
-    BarChart2, Sliders, Wand2, BookmarkPlus, History, Trash2, Download
-};
+// --- COMPONENTES VISUAIS ---
 
 const Icon = ({ name, size = 20, className }) => {
-    const LucideIcon = iconMap[name];
-    if (!LucideIcon) return <span>?</span>;
+    const icons = { Dice5, LayoutDashboard, Cpu, Save, Database, AlertTriangle, BarChart2, Sliders, Wand2, BookmarkPlus, History, Trash2, Download, RefreshCw };
+    const LucideIcon = icons[name] || Dice5;
     return <LucideIcon size={size} className={className} />;
 };
 
-// --- COMPONENTES ---
-
 const StatCard = ({ title, value, subtext, color = "blue" }) => {
-    const borderColors = {
-        blue: "border-blue-500",
-        emerald: "border-emerald-500",
-        red: "border-red-500",
-        purple: "border-purple-500"
+    const colors = {
+        blue: "border-blue-500 text-blue-400",
+        emerald: "border-emerald-500 text-emerald-400",
+        red: "border-red-500 text-red-400",
+        purple: "border-purple-500 text-purple-400",
+        amber: "border-amber-500 text-amber-400"
     };
-
+    const borderColor = colors[color]?.split(' ')[0] || "border-blue-500";
+    
     return (
-        <div className={`bg-slate-800/70 backdrop-blur-md p-4 rounded-xl border-l-4 ${borderColors[color] || borderColors.blue} shadow-lg`}>
-            <h3 className="text-gray-400 text-xs uppercase tracking-wider font-semibold">{title}</h3>
+        <div className={`bg-slate-800/80 backdrop-blur-sm p-4 rounded-xl border-l-4 ${borderColor} shadow-lg shadow-black/20`}>
+            <h3 className="text-gray-400 text-xs uppercase tracking-wider font-bold">{title}</h3>
             <div className="text-2xl font-bold mt-1 text-white">{value}</div>
             {subtext && <div className="text-xs text-gray-500 mt-1">{subtext}</div>}
         </div>
     );
 };
 
-const BallGroup = ({ numbers, size = "md" }) => (
-    <div className="flex flex-wrap gap-1">
-        {numbers.map(n => (
-            <div 
-                key={n} 
-                className={`
-                    flex items-center justify-center rounded-full font-bold shadow-sm
-                    bg-gradient-to-br from-emerald-500 to-emerald-700 text-white border border-emerald-400
-                    ${size === 'sm' ? 'w-6 h-6 text-xs' : 'w-8 h-8 text-sm'}
-                `}
-            >
-                {n.toString().padStart(2, '0')}
-            </div>
-        ))}
-    </div>
-);
+const Ball = ({ n, size = "md" }) => {
+    const sizeClasses = size === 'sm' ? 'w-6 h-6 text-xs' : 'w-9 h-9 text-sm';
+    // Cores baseadas na tabela oficial da Caixa (aproximada) ou gradiente padrão chique
+    return (
+        <div className={`${sizeClasses} flex items-center justify-center rounded-full font-bold shadow-md bg-gradient-to-br from-emerald-600 to-teal-800 text-white border border-emerald-500/30`}>
+            {n.toString().padStart(2, '0')}
+        </div>
+    );
+};
 
-// --- APP PRINCIPAL ---
-export default function App() {
+// --- LÓGICA PRINCIPAL ---
+
+export default function LotoFacilApp() {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    
-    // Filtros do Gerador
+    const [lastUpdated, setLastUpdated] = useState(null);
+
+    // Estado do Gerador
     const [genFilters, setGenFilters] = useState({
-        oddTarget: 9, 
+        oddTarget: 8, // 8 ímpares é muito comum
         sumMin: 180,
         sumMax: 220,
-        repeatsTarget: 9, 
+        repeatsTarget: 9,
+        fixedNumbers: [],
     });
     const [generatedGames, setGeneratedGames] = useState([]);
+    
+    // Jogos Salvos (Persistência)
     const [savedGames, setSavedGames] = useState(() => {
         try {
-            const saved = localStorage.getItem('loto_saved_games');
-            return saved ? JSON.parse(saved) : [];
+            const local = localStorage.getItem('loto_saved_v2');
+            return local ? JSON.parse(local) : [];
         } catch (e) { return []; }
     });
 
-    // DADOS DE EXEMPLO (FALLBACK)
-    const generateMockData = () => {
-        const data = [];
-        for (let i = 3200; i > 3100; i--) {
-            const dezenas = [];
-            while(dezenas.length < 15) {
-                const r = Math.floor(Math.random() * 25) + 1;
-                if(!dezenas.includes(r)) dezenas.push(r);
-            }
-            data.push({ Concurso: i, Dezenas: dezenas.sort((a,b) => a-b) });
-        }
-        return data;
-    };
-
-    // --- FETCHING DE DADOS ---
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                if (API_URL === 'SUA_URL_DO_SCRIPT_AQUI') {
-                    throw new Error("URL da API não configurada no código.");
+        localStorage.setItem('loto_saved_v2', JSON.stringify(savedGames));
+    }, [savedGames]);
+
+    // --- FUNÇÃO INTELIGENTE DE FETCH ---
+    const fetchData = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            console.log("Iniciando busca em:", API_URL);
+            const response = await fetch(API_URL);
+            
+            // Verifica se o Google retornou um erro HTML (comum se o script não estiver público)
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") === -1) {
+                throw new Error("A planilha não retornou JSON. Verifique se o Script está publicado como 'Qualquer pessoa' (Anyone).");
+            }
+
+            const json = await response.json();
+            console.log("Dados brutos recebidos:", json);
+
+            let rawData = [];
+            if (Array.isArray(json)) rawData = json;
+            else if (json.data) rawData = json.data;
+            else if (json.user) rawData = Object.values(json); // Algumas APIs retornam objeto
+            
+            if (!rawData.length) throw new Error("A planilha retornou dados vazios.");
+
+            // --- PARSER INTELIGENTE ---
+            // Detecta formato e normaliza
+            const cleanData = rawData.map((item, index) => {
+                let concurso, dezenas = [];
+
+                // CASO 1: O Script retorna Objeto com chaves nomeadas (Ideal)
+                if (item.Concurso || item.concurso) {
+                    concurso = Number(item.Concurso || item.concurso);
+                    // Tenta achar as bolas nas chaves
+                    for (let i = 1; i <= 25; i++) { // Varre procurando Bola1..Bola15 ou B1..B15
+                        const val = item[`Bola${i}`] || item[`bola${i}`] || item[`B${i}`] || item[`d${i}`];
+                        if (val) dezenas.push(Number(val));
+                    }
+                    // Se não achou chaves de bolas, tenta array 'dezenas' dentro do objeto
+                    if (dezenas.length === 0 && Array.isArray(item.dezenas)) dezenas = item.dezenas;
+                }
+                
+                // CASO 2: O Script retorna Array simples [Concurso, Data, B1, B2...]
+                // Baseado na sua descrição: A=Concurso, B=Data, C=Bola1
+                else if (Array.isArray(item)) {
+                    concurso = Number(item[0]); // Coluna A
+                    // Pega da Coluna C (índice 2) até Q (índice 16) = 15 bolas
+                    // Filtra apenas números válidos
+                    dezenas = item.slice(2, 17).map(Number).filter(n => !isNaN(n) && n > 0);
                 }
 
-                const response = await fetch(API_URL);
-                if (!response.ok) throw new Error("Erro de conexão com o Google Sheets");
-                
-                const json = await response.json();
-                
-                if (json.error) throw new Error(json.error);
-                if (!Array.isArray(json) || json.length === 0) throw new Error("Formato de dados vazio ou inválido.");
+                // Validação final da linha
+                if (!concurso || dezenas.length < 15) return null;
 
-                // Como ajustamos o Script, o JSON já vem limpo: [{Concurso: 1, Dezenas: [...]}, ...]
-                // Só precisamos ordenar.
-                const cleanData = json.sort((a, b) => b.Concurso - a.Concurso);
-                
-                setHistory(cleanData);
-                setLoading(false);
+                return {
+                    Concurso: concurso,
+                    Dezenas: dezenas.sort((a, b) => a - b)
+                };
+            }).filter(Boolean); // Remove nulos
 
-            } catch (err) {
-                console.error("Erro:", err);
-                setError(`Erro: ${err.message}. Usando dados de exemplo.`);
-                setHistory(generateMockData()); // Carrega dados falsos para não quebrar a tela
-                setLoading(false);
+            if (cleanData.length === 0) throw new Error("Não foi possível ler as colunas. Verifique se a planilha tem cabeçalho na linha 1 e dados na linha 2.");
+
+            // Ordena decrescente (mais novo primeiro)
+            cleanData.sort((a, b) => b.Concurso - a.Concurso);
+
+            setHistory(cleanData);
+            setLastUpdated(new Date());
+            setLoading(false);
+
+        } catch (err) {
+            console.error(err);
+            setError(err.message);
+            setLoading(false);
+            // Fallback para dados mockados APENAS se falhar, para o usuário não ver tela branca
+            if (history.length === 0) generateMockData();
+        }
+    };
+
+    const generateMockData = () => {
+        const mock = [];
+        for (let i = 3000; i > 2950; i--) {
+            const dezenas = [];
+            while(dezenas.length < 15) {
+                const n = Math.floor(Math.random() * 25) + 1;
+                if (!dezenas.includes(n)) dezenas.push(n);
             }
-        };
+            mock.push({ Concurso: i, Dezenas: dezenas.sort((a,b)=>a-b) });
+        }
+        setHistory(mock);
+    };
+
+    useEffect(() => {
         fetchData();
     }, []);
 
-    useEffect(() => {
-        localStorage.setItem('loto_saved_games', JSON.stringify(savedGames));
-    }, [savedGames]);
-
-    // --- LÓGICA DE ESTATÍSTICAS ---
+    // --- ESTATÍSTICAS ---
     const stats = useMemo(() => {
         if (!history.length) return null;
-
-        const frequencies = Array(25).fill(0);
-        let totalSum = 0;
         
-        history.forEach(draw => {
-            let drawSum = 0;
-            draw.Dezenas.forEach(n => {
-                if (n >= 1 && n <= 25) frequencies[n-1]++;
-                drawSum += n;
+        const lastDraw = history[0];
+        const freqs = Array(25).fill(0);
+        let sumTotal = 0;
+        let oddTotal = 0;
+
+        // Analisa últimos 100 jogos para tendência recente, ou todos para geral
+        const analysisRange = history; 
+
+        analysisRange.forEach(game => {
+            let gameSum = 0;
+            game.Dezenas.forEach(n => {
+                if (n >= 1 && n <= 25) freqs[n-1]++;
+                gameSum += n;
             });
-            totalSum += drawSum;
+            sumTotal += gameSum;
+            oddTotal += game.Dezenas.filter(n => n % 2 !== 0).length;
         });
 
-        const lastDraw = history[0]; // O primeiro é o mais recente pois ordenamos
-        const avgSum = Math.round(totalSum / history.length);
-        
-        const freqWithIndex = frequencies.map((count, i) => ({ n: i+1, count }));
-        const sortedFreq = [...freqWithIndex].sort((a, b) => b.count - a.count);
+        const avgSum = Math.round(sumTotal / analysisRange.length);
+        const avgOdd = (oddTotal / analysisRange.length).toFixed(1);
+
+        const sortedFreqs = freqs.map((q, i) => ({ n: i+1, q })).sort((a,b) => b.q - a.q);
 
         return {
             lastDraw,
-            hotNumbers: sortedFreq.slice(0, 5),
-            coldNumbers: sortedFreq.slice(-5).reverse(),
             avgSum,
-            frequencies
+            avgOdd,
+            hot: sortedFreqs.slice(0, 5),
+            cold: sortedFreqs.slice(-5).reverse(),
+            freqs
         };
     }, [history]);
 
-    // --- LÓGICA DO GERADOR ---
-    const generateGame = () => {
-        const { oddTarget, sumMin, sumMax, repeatsTarget } = genFilters;
-        const lastDrawSet = new Set(stats?.lastDraw?.Dezenas || []);
-        
+    // --- GERADOR DE JOGOS ---
+    const handleGenerate = () => {
+        if (!stats) return;
+        const lastDrawSet = new Set(stats.lastDraw.Dezenas);
+        let newGames = [];
         let attempts = 0;
-        const maxAttempts = 5000;
-        
-        while (attempts < maxAttempts) {
+
+        while (newGames.length < 5 && attempts < 2000) {
             attempts++;
-            const allNums = Array.from({length: 25}, (_, i) => i + 1);
-            const shuffled = allNums.sort(() => 0.5 - Math.random());
-            const candidate = shuffled.slice(0, 15).sort((a,b) => a-b);
-
-            const sum = candidate.reduce((a, b) => a + b, 0);
-            if (sum < sumMin || sum > sumMax) continue;
-
-            const odds = candidate.filter(n => n % 2 !== 0).length;
-            if (odds < oddTarget - 1 || odds > oddTarget + 1) continue;
-
-            if (lastDrawSet.size > 0) {
-                const repeats = candidate.filter(n => lastDrawSet.has(n)).length;
-                if (repeats < repeatsTarget - 1 || repeats > repeatsTarget + 1) continue;
-            }
-
-            const newGame = {
-                id: Date.now(),
-                numbers: candidate,
-                meta: { sum, odds, repeats: candidate.filter(n => lastDrawSet.has(n)).length }
-            };
+            // 1. Array base 1..25
+            let pool = Array.from({length: 25}, (_, i) => i + 1);
             
-            setGeneratedGames(prev => [newGame, ...prev].slice(0, 10));
-            return;
+            // Embaralha (Fisher-Yates simplificado)
+            pool.sort(() => Math.random() - 0.5);
+            
+            // Pega 15
+            const game = pool.slice(0, 15).sort((a,b) => a-b);
+            
+            // Filtros
+            const sum = game.reduce((a,b) => a+b, 0);
+            if (sum < genFilters.sumMin || sum > genFilters.sumMax) continue;
+
+            const odds = game.filter(n => n % 2 !== 0).length;
+            if (Math.abs(odds - genFilters.oddTarget) > 1) continue; // Aceita margem de erro de 1
+
+            const repeats = game.filter(n => lastDrawSet.has(n)).length;
+            if (Math.abs(repeats - genFilters.repeatsTarget) > 1) continue;
+
+            newGames.push({
+                id: Date.now() + attempts,
+                numbers: game,
+                meta: { sum, odds, repeats }
+            });
         }
-        alert("Filtros muito rigorosos. Tente aumentar a margem dos ímpares ou repetidos.");
-    };
-
-    const saveGame = (game) => {
-        if (!savedGames.find(g => JSON.stringify(g.numbers) === JSON.stringify(game.numbers))) {
-            setSavedGames([...savedGames, game]);
+        
+        if (newGames.length === 0) {
+            alert("Filtros muito rigorosos! Tente aumentar o intervalo da Soma ou relaxar os Ímpares.");
+        } else {
+            setGeneratedGames(prev => [...newGames, ...prev].slice(0, 20));
         }
     };
 
-    const deleteSavedGame = (id) => setSavedGames(savedGames.filter(g => g.id !== id));
-
-    const exportGames = () => {
-        let content = "MEUS JOGOS SALVOS - LOTOANALÍTICA PRO\n\n";
-        savedGames.forEach((g, i) => {
-            content += `Jogo ${i+1}: ${g.numbers.join(', ')}\n`;
-        });
-        const blob = new Blob([content], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'meus_jogos.txt';
-        a.click();
+    const checkHits = (gameNumbers) => {
+        if (!history.length) return 0;
+        // Verifica contra o último resultado oficial
+        const lastResult = history[0].Dezenas;
+        return gameNumbers.filter(n => lastResult.includes(n)).length;
     };
 
-    const checkPerformance = (numbers) => {
-        if (!history.length) return { maxHits: 0 };
-        let maxHits = 0;
-        const limit = Math.min(50, history.length); // Verifica últimos 50 para ser mais rápido
-        for(let i=0; i<limit; i++) {
-            const hits = numbers.filter(n => history[i].Dezenas.includes(n)).length;
-            if (hits > maxHits) maxHits = hits;
-        }
-        return { maxHits };
-    };
-
-    // RENDERIZAÇÃO DO GRÁFICO
-    const renderFreqChart = () => {
-        if (!stats) return null;
-        const maxVal = Math.max(...stats.frequencies);
-        return (
-            <div className="h-40 flex items-end gap-1 mt-4">
-                {stats.frequencies.map((val, idx) => (
-                    <div key={idx} className="flex-1 flex flex-col items-center group relative">
-                        <div 
-                            className="w-full bg-emerald-500/50 hover:bg-emerald-400 rounded-t transition-all"
-                            style={{ height: `${(val / maxVal) * 100}%` }}
-                        ></div>
-                        <span className="text-[10px] text-gray-400 mt-1">{idx+1}</span>
-                        <div className="absolute bottom-full mb-2 hidden group-hover:block bg-black text-xs p-1 rounded z-10 whitespace-nowrap text-white">
-                            Nº {idx+1}: {val}x
-                        </div>
-                    </div>
-                ))}
-            </div>
-        );
-    };
-
-    if (loading) return (
-        <div className="flex h-screen items-center justify-center bg-slate-900 text-white flex-col gap-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
-            <p>Conectando à base de dados da Lotofácil...</p>
-        </div>
-    );
-
+    // --- RENDER ---
     return (
-        <div className="min-h-screen pb-10 bg-slate-900 text-slate-200 font-sans">
-            {/* HEADER */}
-            <header className="bg-slate-800 border-b border-slate-700 sticky top-0 z-20 shadow-md">
-                <div className="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                        <div className="bg-emerald-600 p-2 rounded-lg">
-                            <Icon name="Dice5" className="text-white" />
+        <div className="min-h-screen bg-slate-900 text-slate-100 font-sans selection:bg-emerald-500 selection:text-white">
+            
+            {/* TOPO */}
+            <header className="bg-slate-800 border-b border-slate-700 sticky top-0 z-50">
+                <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-gradient-to-tr from-emerald-500 to-teal-700 p-2 rounded-lg shadow-lg shadow-emerald-900/50">
+                            <Icon name="Dice5" className="text-white" size={24} />
                         </div>
                         <div>
-                            <h1 className="font-bold text-lg text-white leading-none">LotoAnalítica</h1>
-                            <span className="text-xs text-emerald-400">Sistema Inteligente</span>
+                            <h1 className="text-xl font-bold text-white tracking-tight">Loto<span className="text-emerald-400">Analítica</span></h1>
+                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Dashboard Pro</p>
                         </div>
                     </div>
-                    {stats && (
-                        <div className="text-right hidden md:block">
-                            <p className="text-xs text-gray-400">Último Concurso</p>
-                            <p className="font-bold text-white">#{stats.lastDraw.Concurso}</p>
-                        </div>
-                    )}
+
+                    <div className="hidden md:flex items-center gap-6">
+                         {stats && (
+                            <div className="text-right">
+                                <p className="text-xs text-slate-400">Último Concurso</p>
+                                <p className="text-lg font-bold text-white leading-none">#{stats.lastDraw.Concurso}</p>
+                            </div>
+                        )}
+                        <button 
+                            onClick={fetchData} 
+                            disabled={loading}
+                            className="bg-slate-700 hover:bg-slate-600 p-2 rounded-full transition-all active:scale-95 disabled:opacity-50"
+                        >
+                            <Icon name="RefreshCw" className={loading ? "animate-spin" : ""} />
+                        </button>
+                    </div>
                 </div>
-                
-                <nav className="flex justify-center gap-1 p-2 bg-slate-900/50 overflow-x-auto">
+            </header>
+
+            {/* NAV MOBILE */}
+            <div className="md:hidden bg-slate-800/50 backdrop-blur border-b border-slate-700 overflow-x-auto">
+                <div className="flex p-2 gap-2 min-w-max">
                     {[
-                        { id: 'dashboard', label: 'Dashboard', icon: 'LayoutDashboard' },
+                        { id: 'dashboard', label: 'Painel', icon: 'LayoutDashboard' },
                         { id: 'generator', label: 'Gerador IA', icon: 'Cpu' },
-                        { id: 'saved', label: 'Meus Jogos', icon: 'Save' },
-                        { id: 'data', label: 'Base de Dados', icon: 'Database' }
+                        { id: 'saved', label: 'Salvos', icon: 'Save' },
+                        { id: 'data', label: 'Tabela', icon: 'Database' },
                     ].map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                                activeTab === tab.id 
-                                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50' 
-                                : 'text-gray-400 hover:bg-slate-700 hover:text-white'
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                activeTab === tab.id ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-700'
                             }`}
                         >
                             <Icon name={tab.icon} size={16} />
                             {tab.label}
                         </button>
                     ))}
-                </nav>
-            </header>
-            
-            {error && (
-                <div className="max-w-6xl mx-auto m-4 p-3 bg-amber-900/30 border border-amber-600/50 rounded text-amber-200 text-sm flex items-center gap-2">
-                    <Icon name="AlertTriangle" size={16} />
-                    {error}
                 </div>
-            )}
+            </div>
 
-            <main className="max-w-6xl mx-auto px-4 py-6">
+            <main className="max-w-6xl mx-auto px-4 py-8">
                 
-                {/* VIEW: DASHBOARD */}
-                {activeTab === 'dashboard' && stats && (
-                    <div className="space-y-6">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <StatCard title="Média da Soma" value={stats.avgSum} subtext="Ideal: 180-220" />
-                            <StatCard title="Mais Saiu" value={stats.hotNumbers[0].n} subtext={`${stats.hotNumbers[0].count} vezes`} color="emerald" />
-                            <StatCard title="Menos Saiu" value={stats.coldNumbers[0].n} subtext={`${stats.coldNumbers[0].count} vezes`} color="red" />
-                            <StatCard title="Total Analisado" value={history.length} subtext="Concursos" color="purple" />
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div className="md:col-span-2 bg-slate-800/70 backdrop-blur-md p-5 rounded-xl border border-slate-700">
-                                <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
-                                    <Icon name="BarChart2" className="text-emerald-400" />
-                                    Frequência dos Números
-                                </h2>
-                                {renderFreqChart()}
-                            </div>
-
-                            <div className="bg-slate-800/70 backdrop-blur-md p-5 rounded-xl border border-slate-700">
-                                <h2 className="text-white font-semibold mb-4">Último Resultado (#{stats.lastDraw.Concurso})</h2>
-                                <BallGroup numbers={stats.lastDraw.Dezenas} />
-                                <div className="mt-6 space-y-3">
-                                    <div className="flex justify-between text-sm border-b border-slate-600 pb-2">
-                                        <span className="text-gray-400">Soma Total</span>
-                                        <span className="text-white font-mono">{stats.lastDraw.Dezenas.reduce((a,b)=>a+b,0)}</span>
-                                    </div>
-                                    <div className="flex justify-between text-sm border-b border-slate-600 pb-2">
-                                        <span className="text-gray-400">Pares / Ímpares</span>
-                                        <span className="text-white font-mono">
-                                            {stats.lastDraw.Dezenas.filter(n=>n%2===0).length} / {stats.lastDraw.Dezenas.filter(n=>n%2!==0).length}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
+                {/* STATUS BAR */}
+                {error && (
+                    <div className="mb-6 bg-red-900/30 border border-red-500/50 p-4 rounded-xl flex items-center gap-3 text-red-200 animate-in fade-in slide-in-from-top-4">
+                        <Icon name="AlertTriangle" />
+                        <div>
+                            <p className="font-bold">Erro de Conexão</p>
+                            <p className="text-sm opacity-80">{error}</p>
+                            <p className="text-xs mt-1 text-red-400">Exibindo dados de exemplo para demonstração.</p>
                         </div>
                     </div>
                 )}
 
-                {/* VIEW: GENERATOR */}
-                {activeTab === 'generator' && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="bg-slate-800/70 backdrop-blur-md p-5 rounded-xl border border-slate-700 h-fit">
-                            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                                <Icon name="Sliders" size={18} /> Filtros do Gerador
-                            </h2>
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-xs text-gray-400 mb-1">Ímpares Desejados (Média: 7-9)</label>
-                                    <input 
-                                        type="range" min="5" max="11" 
-                                        value={genFilters.oddTarget} 
-                                        onChange={(e) => setGenFilters({...genFilters, oddTarget: parseInt(e.target.value)})}
-                                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                                    />
-                                    <div className="text-right text-emerald-400 font-mono font-bold">{genFilters.oddTarget}</div>
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-400 mb-1">Repetidos do Último (Média: 8-10)</label>
-                                    <input 
-                                        type="range" min="5" max="12" 
-                                        value={genFilters.repeatsTarget} 
-                                        onChange={(e) => setGenFilters({...genFilters, repeatsTarget: parseInt(e.target.value)})}
-                                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                                    />
-                                    <div className="text-right text-blue-400 font-mono font-bold">{genFilters.repeatsTarget}</div>
-                                </div>
-                                <button 
-                                    onClick={generateGame}
-                                    className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-lg shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95"
+                {loading && !history.length ? (
+                    <div className="flex flex-col items-center justify-center h-64 gap-4">
+                        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-slate-400 animate-pulse">Sincronizando com Google Sheets...</p>
+                    </div>
+                ) : (
+                    <>
+                        {/* NAV DESKTOP */}
+                        <div className="hidden md:flex mb-8 bg-slate-800 p-1 rounded-xl w-fit">
+                             {[
+                                { id: 'dashboard', label: 'Visão Geral', icon: 'LayoutDashboard' },
+                                { id: 'generator', label: 'Gerador Inteligente', icon: 'Cpu' },
+                                { id: 'saved', label: 'Meus Jogos', icon: 'Save' },
+                                { id: 'data', label: 'Base de Dados', icon: 'Database' },
+                            ].map(tab => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                                        activeTab === tab.id 
+                                        ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50' 
+                                        : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                                    }`}
                                 >
-                                    <Icon name="Wand2" size={18} /> Gerar Jogo
+                                    <Icon name={tab.icon} size={18} />
+                                    {tab.label}
                                 </button>
-                            </div>
-                        </div>
-
-                        <div className="md:col-span-2 space-y-4">
-                            <h2 className="text-white font-semibold">Jogos Gerados</h2>
-                            {generatedGames.map((game, idx) => {
-                                const sim = checkPerformance(game.numbers);
-                                return (
-                                    <div key={game.id} className="bg-slate-800/70 backdrop-blur-md p-4 rounded-xl border-l-4 border-emerald-500 animate-pulse-once">
-                                        <div className="flex justify-between items-start mb-3">
-                                            <div className="flex items-center gap-2">
-                                                <span className="bg-emerald-900 text-emerald-300 text-xs px-2 py-1 rounded font-bold">JOGO {idx + 1}</span>
-                                                <span className="text-xs text-gray-400">Soma: {game.meta.sum} | Ímp: {game.meta.odds} | Rep: {game.meta.repeats}</span>
-                                            </div>
-                                            <button onClick={() => saveGame(game)} className="text-gray-400 hover:text-emerald-400">
-                                                <Icon name="BookmarkPlus" size={20} />
-                                            </button>
-                                        </div>
-                                        <BallGroup numbers={game.numbers} size="sm" />
-                                        <div className="mt-2 text-xs text-gray-500">
-                                            Max. acertos (últimos 50): <span className="text-emerald-400 font-bold">{sim.maxHits}</span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
-                {/* VIEW: SAVED GAMES */}
-                {activeTab === 'saved' && (
-                    <div className="space-y-6">
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-xl font-bold text-white">Meus Jogos Salvos ({savedGames.length})</h2>
-                            <button onClick={exportGames} className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2">
-                                <Icon name="Download" size={16} /> Exportar
-                            </button>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {savedGames.map((game, i) => (
-                                <div key={game.id} className="bg-slate-800/70 backdrop-blur-md p-4 rounded-xl relative group border border-slate-700">
-                                    <button onClick={() => deleteSavedGame(game.id)} className="absolute top-2 right-2 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-2">
-                                        <Icon name="Trash2" size={16} />
-                                    </button>
-                                    <div className="mb-2 text-xs text-gray-400 font-bold">JOGO #{i+1}</div>
-                                    <BallGroup numbers={game.numbers} />
-                                </div>
                             ))}
                         </div>
-                    </div>
-                )}
 
-                {/* VIEW: DATA TABLE */}
-                {activeTab === 'data' && (
-                    <div className="bg-slate-800/70 backdrop-blur-md rounded-xl overflow-hidden border border-slate-700">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm text-gray-400">
-                                <thead className="bg-slate-900 text-gray-200 uppercase font-medium">
-                                    <tr>
-                                        <th className="px-6 py-3">Concurso</th>
-                                        <th className="px-6 py-3">Dezenas</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-700">
-                                    {history.slice(0, 50).map((row) => (
-                                        <tr key={row.Concurso} className="hover:bg-slate-800/50">
-                                            <td className="px-6 py-4 font-bold text-white">#{row.Concurso}</td>
-                                            <td className="px-6 py-4">
-                                                <BallGroup numbers={row.Dezenas} size="sm" />
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                        {/* CONTEÚDO */}
+                        {stats && activeTab === 'dashboard' && (
+                            <div className="animate-in fade-in duration-500 space-y-6">
+                                {/* Destaque Último Jogo */}
+                                <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl relative overflow-hidden group">
+                                    <div className="absolute top-0 right-0 p-32 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                                    
+                                    <div className="flex flex-col md:flex-row justify-between items-center gap-6 relative z-10">
+                                        <div className="text-center md:text-left">
+                                            <h2 className="text-slate-400 font-semibold text-sm uppercase tracking-wide mb-1">Resultado Mais Recente</h2>
+                                            <div className="text-4xl font-bold text-white mb-2">Concurso #{stats.lastDraw.Concurso}</div>
+                                            <div className="flex gap-4 text-sm justify-center md:justify-start">
+                                                <span className="text-emerald-400 bg-emerald-900/30 px-2 py-1 rounded">Soma: {stats.lastDraw.Dezenas.reduce((a,b)=>a+b,0)}</span>
+                                                <span className="text-blue-400 bg-blue-900/30 px-2 py-1 rounded">Ímpares: {stats.lastDraw.Dezenas.filter(n=>n%2!==0).length}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-wrap justify-center gap-2 max-w-lg">
+                                            {stats.lastDraw.Dezenas.map(n => <Ball key={n} n={n} />)}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Cards de Estatística */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <StatCard title="Média Soma" value={stats.avgSum} subtext="Ideal: 190-210" color="blue" />
+                                    <StatCard title="Média Ímpares" value={stats.avgOdd} subtext="Ideal: 7-9" color="purple" />
+                                    <StatCard title="Mais Saiu" value={`Nº ${stats.hot[0].n}`} subtext={`${stats.hot[0].q} vezes`} color="emerald" />
+                                    <StatCard title="Menos Saiu" value={`Nº ${stats.cold[0].n}`} subtext={`${stats.cold[0].q} vezes`} color="red" />
+                                </div>
+
+                                {/* Gráfico de Frequência e Hot/Cold */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <div className="md:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700">
+                                        <h3 className="text-white font-bold mb-6 flex items-center gap-2">
+                                            <Icon name="BarChart2" className="text-emerald-400" />
+                                            Mapa de Calor (Frequência)
+                                        </h3>
+                                        <div className="h-48 flex items-end gap-1">
+                                            {stats.freqs.map((val, idx) => {
+                                                const max = Math.max(...stats.freqs);
+                                                const h = (val / max) * 100;
+                                                const isHot = stats.hot.some(h => h.n === idx+1);
+                                                return (
+                                                    <div key={idx} className="flex-1 flex flex-col items-center group relative h-full justify-end">
+                                                        <div 
+                                                            className={`w-full rounded-t-sm transition-all duration-500 ${isHot ? 'bg-emerald-400' : 'bg-slate-600 group-hover:bg-slate-500'}`}
+                                                            style={{ height: `${h}%` }}
+                                                        ></div>
+                                                        <span className="text-[10px] text-slate-500 mt-1 font-mono">{idx+1}</span>
+                                                        {/* Tooltip */}
+                                                        <div className="absolute bottom-full mb-2 bg-black text-xs px-2 py-1 rounded hidden group-hover:block whitespace-nowrap z-20">
+                                                            Nº {idx+1}: {val}x
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 space-y-6">
+                                        <div>
+                                            <h3 className="text-emerald-400 font-bold text-sm uppercase mb-3 flex items-center gap-2">
+                                                🔥 Números Quentes
+                                            </h3>
+                                            <div className="flex flex-wrap gap-2">
+                                                {stats.hot.map(h => (
+                                                    <div key={h.n} className="bg-slate-900 px-3 py-1.5 rounded-lg text-sm flex justify-between items-center w-full">
+                                                        <span className="font-bold text-white">Nº {h.n.toString().padStart(2,'0')}</span>
+                                                        <span className="text-emerald-500 text-xs">{h.q}x</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-blue-400 font-bold text-sm uppercase mb-3 flex items-center gap-2">
+                                                ❄️ Números Frios
+                                            </h3>
+                                            <div className="flex flex-wrap gap-2">
+                                                {stats.cold.map(c => (
+                                                    <div key={c.n} className="bg-slate-900 px-3 py-1.5 rounded-lg text-sm flex justify-between items-center w-full">
+                                                        <span className="font-bold text-white">Nº {c.n.toString().padStart(2,'0')}</span>
+                                                        <span className="text-blue-500 text-xs">{c.q}x</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'generator' && (
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in slide-in-from-right-4">
+                                {/* Controles */}
+                                <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 h-fit">
+                                    <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                                        <Icon name="Sliders" className="text-emerald-400" /> 
+                                        Configurar IA
+                                    </h2>
+                                    
+                                    <div className="space-y-6">
+                                        <div>
+                                            <div className="flex justify-between text-sm mb-2">
+                                                <label className="text-slate-300">Ímpares (Alvo)</label>
+                                                <span className="text-emerald-400 font-bold">{genFilters.oddTarget}</span>
+                                            </div>
+                                            <input 
+                                                type="range" min="5" max="11" 
+                                                value={genFilters.oddTarget} 
+                                                onChange={e => setGenFilters({...genFilters, oddTarget: Number(e.target.value)})}
+                                                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                            />
+                                            <p className="text-xs text-slate-500 mt-1">Recomendado: 7 a 9</p>
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between text-sm mb-2">
+                                                <label className="text-slate-300">Repetidos do Anterior</label>
+                                                <span className="text-blue-400 font-bold">{genFilters.repeatsTarget}</span>
+                                            </div>
+                                            <input 
+                                                type="range" min="5" max="11" 
+                                                value={genFilters.repeatsTarget} 
+                                                onChange={e => setGenFilters({...genFilters, repeatsTarget: Number(e.target.value)})}
+                                                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                            />
+                                            <p className="text-xs text-slate-500 mt-1">Recomendado: 8 a 10</p>
+                                        </div>
+
+                                        <div className="pt-4 border-t border-slate-700">
+                                            <button 
+                                                onClick={handleGenerate}
+                                                className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/50 flex items-center justify-center gap-2 transition-all active:scale-95"
+                                            >
+                                                <Icon name="Wand2" size={20} />
+                                                Gerar Combinações
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Resultados */}
+                                <div className="lg:col-span-2 space-y-4">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h2 className="text-white font-bold">Jogos Gerados</h2>
+                                        {generatedGames.length > 0 && (
+                                            <button onClick={() => setGeneratedGames([])} className="text-xs text-red-400 hover:underline">Limpar</button>
+                                        )}
+                                    </div>
+
+                                    {generatedGames.length === 0 ? (
+                                        <div className="border-2 border-dashed border-slate-700 rounded-2xl p-10 text-center text-slate-500">
+                                            <Icon name="Cpu" size={48} className="mx-auto mb-4 opacity-50" />
+                                            <p>Ajuste os filtros e clique em Gerar para usar a inteligência estatística.</p>
+                                        </div>
+                                    ) : (
+                                        generatedGames.map((game, idx) => (
+                                            <div key={game.id} className="bg-slate-800 rounded-xl p-4 border-l-4 border-emerald-500 animate-in slide-in-from-bottom-2 fade-in">
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="bg-emerald-900/50 text-emerald-400 text-xs font-bold px-2 py-1 rounded">JOGO {idx + 1}</span>
+                                                        <span className="text-xs text-slate-400 hidden sm:inline-block">
+                                                            Soma: <b>{game.meta.sum}</b> • Ímpares: <b>{game.meta.odds}</b> • Repetidos: <b>{game.meta.repeats}</b>
+                                                        </span>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => {
+                                                            if(!savedGames.some(g => JSON.stringify(g.numbers) === JSON.stringify(game.numbers))) {
+                                                                setSavedGames(prev => [game, ...prev]);
+                                                            }
+                                                        }}
+                                                        className="text-slate-400 hover:text-emerald-400 transition-colors p-1"
+                                                        title="Salvar Jogo"
+                                                    >
+                                                        <Icon name="BookmarkPlus" />
+                                                    </button>
+                                                </div>
+                                                <div className="flex flex-wrap gap-1.5 justify-center sm:justify-start">
+                                                    {game.numbers.map(n => (
+                                                        <span key={n} className="w-8 h-8 rounded-full bg-slate-700 text-white flex items-center justify-center font-bold text-sm shadow-inner border border-slate-600">
+                                                            {n}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'saved' && (
+                            <div className="space-y-6 animate-in fade-in">
+                                <div className="flex justify-between items-center bg-slate-800 p-4 rounded-xl border border-slate-700">
+                                    <h2 className="font-bold text-white flex items-center gap-2">
+                                        <Icon name="Save" className="text-emerald-400" />
+                                        Meus Jogos Salvos ({savedGames.length})
+                                    </h2>
+                                    <button 
+                                        onClick={() => {
+                                            const text = savedGames.map((g,i) => `Jogo ${i+1}: ${g.numbers.join(', ')}`).join('\n');
+                                            const blob = new Blob([text], {type: 'text/plain'});
+                                            const url = URL.createObjectURL(blob);
+                                            const a = document.createElement('a');
+                                            a.href = url; a.download = 'meus_jogos_lotofacil.txt';
+                                            a.click();
+                                        }}
+                                        className="text-sm bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                                    >
+                                        <Icon name="Download" size={16} /> Exportar .TXT
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {savedGames.length === 0 && (
+                                        <p className="col-span-2 text-center text-slate-500 py-10">Nenhum jogo salvo ainda.</p>
+                                    )}
+                                    {savedGames.map((game, i) => {
+                                        const hits = checkHits(game.numbers);
+                                        return (
+                                            <div key={game.id} className="bg-slate-800 p-5 rounded-xl border border-slate-700 relative group">
+                                                <button 
+                                                    onClick={() => setSavedGames(savedGames.filter(g => g.id !== game.id))}
+                                                    className="absolute top-3 right-3 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-slate-700 rounded"
+                                                >
+                                                    <Icon name="Trash2" size={16} />
+                                                </button>
+                                                
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <span className="text-xs font-bold text-slate-400">JOGO SALVO #{savedGames.length - i}</span>
+                                                    {hits >= 11 ? (
+                                                        <span className="text-xs font-bold bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded">
+                                                            {hits} ACERTOS (Último)
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs font-bold text-slate-600 px-2 py-1">
+                                                            {hits} acertos (Último)
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex flex-wrap gap-1.5 mb-2">
+                                                    {game.numbers.map(n => (
+                                                        <span key={n} className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${stats.lastDraw.Dezenas.includes(n) ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30 ring-1 ring-emerald-400' : 'bg-slate-700 text-slate-300'}`}>
+                                                            {n}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'data' && (
+                            <div className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700 animate-in fade-in">
+                                <div className="max-h-[600px] overflow-auto custom-scrollbar">
+                                    <table className="w-full text-left text-sm text-slate-400">
+                                        <thead className="bg-slate-900 text-slate-200 sticky top-0 z-10 shadow-md">
+                                            <tr>
+                                                <th className="px-6 py-4 font-bold">Concurso</th>
+                                                <th className="px-6 py-4 font-bold">Dezenas Sorteadas</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-700">
+                                            {history.slice(0, 50).map((row) => (
+                                                <tr key={row.Concurso} className="hover:bg-slate-700/50 transition-colors">
+                                                    <td className="px-6 py-4 font-mono text-emerald-400 font-bold">#{row.Concurso}</td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {row.Dezenas.map(n => (
+                                                                <span key={n} className="inline-block w-6 text-center bg-slate-700 text-white rounded text-xs font-bold py-0.5">
+                                                                    {n}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="p-4 bg-slate-900 text-center text-xs text-slate-500 border-t border-slate-700">
+                                    Mostrando os 50 registros mais recentes da base de dados. Total carregado: {history.length}.
+                                </div>
+                            </div>
+                        )}
+                    </>
                 )}
             </main>
         </div>
