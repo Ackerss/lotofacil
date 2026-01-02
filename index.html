@@ -15,8 +15,11 @@ import {
     Download 
 } from 'lucide-react';
 
-// --- STYLE & UTILS ---
-// Mapeamento de ícones para manter a estrutura dinâmica do código original
+// --- CONFIGURAÇÃO ---
+// COLE A URL DA SUA NOVA IMPLANTAÇÃO AQUI:
+const API_URL = 'https://script.google.com/macros/s/AKfycbzKmqFJ-g1mmXuyCPfETPLb_wFDjvDwFguy4lB6zUVOlVoCTOieLRPMF4C9T8xuiNq-mA/exec'; 
+
+// --- UTILITÁRIOS ---
 const iconMap = {
     Dice5, LayoutDashboard, Cpu, Save, Database, AlertTriangle, 
     BarChart2, Sliders, Wand2, BookmarkPlus, History, Trash2, Download
@@ -28,11 +31,9 @@ const Icon = ({ name, size = 20, className }) => {
     return <LucideIcon size={size} className={className} />;
 };
 
-// --- COMPONENTS ---
+// --- COMPONENTES ---
 
-// 1. STATS CARD
 const StatCard = ({ title, value, subtext, color = "blue" }) => {
-    // Map colors to Tailwind classes dynamically
     const borderColors = {
         blue: "border-blue-500",
         emerald: "border-emerald-500",
@@ -49,7 +50,6 @@ const StatCard = ({ title, value, subtext, color = "blue" }) => {
     );
 };
 
-// 2. BALL DISPLAY
 const BallGroup = ({ numbers, size = "md" }) => (
     <div className="flex flex-wrap gap-1">
         {numbers.map(n => (
@@ -67,117 +67,69 @@ const BallGroup = ({ numbers, size = "md" }) => (
     </div>
 );
 
-// --- MAIN APP ---
+// --- APP PRINCIPAL ---
 export default function App() {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     
-    // Generator State
+    // Filtros do Gerador
     const [genFilters, setGenFilters] = useState({
-        oddTarget: 7, // Padrão: 7 a 9 ímpares
+        oddTarget: 9, 
         sumMin: 180,
         sumMax: 220,
-        repeatsTarget: 9, // Padrão: 8 a 10 repetidas
-        fixedNumbers: [],
-        excludeNumbers: []
+        repeatsTarget: 9, 
     });
     const [generatedGames, setGeneratedGames] = useState([]);
     const [savedGames, setSavedGames] = useState(() => {
         try {
             const saved = localStorage.getItem('loto_saved_games');
             return saved ? JSON.parse(saved) : [];
-        } catch (e) {
-            return [];
-        }
+        } catch (e) { return []; }
     });
 
-    // --- MOCK DATA FALLBACK ---
+    // DADOS DE EXEMPLO (FALLBACK)
     const generateMockData = () => {
         const data = [];
-        for (let i = 3000; i > 2900; i--) {
+        for (let i = 3200; i > 3100; i--) {
             const dezenas = [];
             while(dezenas.length < 15) {
                 const r = Math.floor(Math.random() * 25) + 1;
                 if(!dezenas.includes(r)) dezenas.push(r);
             }
-            data.push({
-                Concurso: i,
-                Data: new Date().toLocaleDateString(),
-                Dezenas: dezenas.sort((a,b) => a-b)
-            });
+            data.push({ Concurso: i, Dezenas: dezenas.sort((a,b) => a-b) });
         }
         return data;
     };
 
-    // DATA FETCHING - CORRIGIDO PARA LER COLUNAS "BOLA1", "BOLA2"...
+    // --- FETCHING DE DADOS ---
     useEffect(() => {
         const fetchData = async () => {
             try {
-                // Tenta buscar da URL do usuário
-                const response = await fetch('https://script.google.com/macros/s/AKfycbwbeoQHQpVz9unauVFQtTVLX2hjR9vOhAcwWoqLICReKelBowYthmEyohFrAY9pq4sw6g/exec');
-                if (!response.ok) throw new Error("Erro na rede");
-                const json = await response.json();
-                
-                let rawData = [];
-                // Detecta se é array direto ou objeto com chave data
-                if (Array.isArray(json)) {
-                    rawData = json;
-                } else if (json.data && Array.isArray(json.data)) {
-                    rawData = json.data; 
-                } else {
-                    // Tenta converter valores de objeto se não for array
-                    rawData = Object.values(json);
+                if (API_URL === 'SUA_URL_DO_SCRIPT_AQUI') {
+                    throw new Error("URL da API não configurada no código.");
                 }
 
-                if(!rawData || rawData.length === 0) throw new Error("Formato de dados vazio.");
+                const response = await fetch(API_URL);
+                if (!response.ok) throw new Error("Erro de conexão com o Google Sheets");
                 
-                // --- MAPEAMENTO CORRIGIDO ---
-                const cleanData = rawData.map(item => {
-                    // 1. Tenta pegar o Concurso
-                    const concurso = Number(item.Concurso || item.concurso || item['Concurso'] || item[0]);
-
-                    // 2. Tenta pegar as Bolas (Bola1 ... Bola15)
-                    let dezenas = [];
-                    
-                    // Prioridade: Chaves explícitas "Bola1", "Bola2"...
-                    for (let i = 1; i <= 15; i++) {
-                        // Tenta variações de capitalização só por segurança
-                        const val = item[`Bola${i}`] || item[`bola${i}`] || item[`Bola ${i}`];
-                        if (val) {
-                            dezenas.push(Number(val));
-                        }
-                    }
-
-                    // Fallback: Se não achou por chaves, tenta por posição de array (caso a API retorne linhas sem chaves)
-                    // Assumindo A=Concurso, B=Data, C=Bola1 (index 2)
-                    if (dezenas.length < 15 && Array.isArray(item)) {
-                        dezenas = item.slice(2, 17).map(Number);
-                    }
-                    
-                    // Fallback: Tenta achar um array pronto "Dezenas"
-                    if (dezenas.length < 15 && (item.Dezenas || item.balls)) {
-                        dezenas = (item.Dezenas || item.balls).map(Number);
-                    }
-
-                    return {
-                        Concurso: concurso,
-                        Dezenas: dezenas.sort((a,b) => a-b)
-                    };
-                }).filter(d => !isNaN(d.Concurso) && d.Dezenas.length >= 15);
-
-                if(cleanData.length === 0) throw new Error("Nenhum dado válido encontrado após mapeamento das colunas.");
+                const json = await response.json();
                 
-                // Ordenar decrescente (mais recente primeiro)
-                cleanData.sort((a, b) => b.Concurso - a.Concurso);
+                if (json.error) throw new Error(json.error);
+                if (!Array.isArray(json) || json.length === 0) throw new Error("Formato de dados vazio ou inválido.");
+
+                // Como ajustamos o Script, o JSON já vem limpo: [{Concurso: 1, Dezenas: [...]}, ...]
+                // Só precisamos ordenar.
+                const cleanData = json.sort((a, b) => b.Concurso - a.Concurso);
+                
                 setHistory(cleanData);
                 setLoading(false);
 
             } catch (err) {
-                console.error("Falha ao carregar, usando fallback:", err);
-                setError(`Erro ao processar planilha: ${err.message}. Carregando dados de exemplo.`);
-                setHistory(generateMockData());
+                console.error("Erro:", err);
+                setError(`Erro: ${err.message}. Usando dados de exemplo.`);
+                setHistory(generateMockData()); // Carrega dados falsos para não quebrar a tela
                 setLoading(false);
             }
         };
@@ -188,7 +140,7 @@ export default function App() {
         localStorage.setItem('loto_saved_games', JSON.stringify(savedGames));
     }, [savedGames]);
 
-    // --- ANALYTICS LOGIC ---
+    // --- LÓGICA DE ESTATÍSTICAS ---
     const stats = useMemo(() => {
         if (!history.length) return null;
 
@@ -204,10 +156,9 @@ export default function App() {
             totalSum += drawSum;
         });
 
-        const lastDraw = history[0];
+        const lastDraw = history[0]; // O primeiro é o mais recente pois ordenamos
         const avgSum = Math.round(totalSum / history.length);
         
-        // Hot/Cold numbers
         const freqWithIndex = frequencies.map((count, i) => ({ n: i+1, count }));
         const sortedFreq = [...freqWithIndex].sort((a, b) => b.count - a.count);
 
@@ -220,47 +171,41 @@ export default function App() {
         };
     }, [history]);
 
-    // --- GENERATOR LOGIC ---
+    // --- LÓGICA DO GERADOR ---
     const generateGame = () => {
         const { oddTarget, sumMin, sumMax, repeatsTarget } = genFilters;
         const lastDrawSet = new Set(stats?.lastDraw?.Dezenas || []);
         
         let attempts = 0;
-        const maxAttempts = 2000; // Evitar loop infinito
+        const maxAttempts = 5000;
         
         while (attempts < maxAttempts) {
             attempts++;
-            // 1. Shuffle & Pick 15
             const allNums = Array.from({length: 25}, (_, i) => i + 1);
             const shuffled = allNums.sort(() => 0.5 - Math.random());
             const candidate = shuffled.slice(0, 15).sort((a,b) => a-b);
 
-            // 2. Check Sum
             const sum = candidate.reduce((a, b) => a + b, 0);
             if (sum < sumMin || sum > sumMax) continue;
 
-            // 3. Check Odd/Even
             const odds = candidate.filter(n => n % 2 !== 0).length;
-            // Aceita margem de erro de +/- 1
             if (odds < oddTarget - 1 || odds > oddTarget + 1) continue;
 
-            // 4. Check Repeats from Last Draw
             if (lastDrawSet.size > 0) {
                 const repeats = candidate.filter(n => lastDrawSet.has(n)).length;
                 if (repeats < repeatsTarget - 1 || repeats > repeatsTarget + 1) continue;
             }
 
-            // Success
             const newGame = {
                 id: Date.now(),
                 numbers: candidate,
                 meta: { sum, odds, repeats: candidate.filter(n => lastDrawSet.has(n)).length }
             };
             
-            setGeneratedGames(prev => [newGame, ...prev].slice(0, 10)); // Keep last 10
+            setGeneratedGames(prev => [newGame, ...prev].slice(0, 10));
             return;
         }
-        alert("Não foi possível gerar um jogo com esses filtros estritos. Tente relaxar as regras.");
+        alert("Filtros muito rigorosos. Tente aumentar a margem dos ímpares ou repetidos.");
     };
 
     const saveGame = (game) => {
@@ -269,9 +214,7 @@ export default function App() {
         }
     };
 
-    const deleteSavedGame = (id) => {
-        setSavedGames(savedGames.filter(g => g.id !== id));
-    };
+    const deleteSavedGame = (id) => setSavedGames(savedGames.filter(g => g.id !== id));
 
     const exportGames = () => {
         let content = "MEUS JOGOS SALVOS - LOTOANALÍTICA PRO\n\n";
@@ -286,31 +229,21 @@ export default function App() {
         a.click();
     };
 
-    // --- SIMULATOR LOGIC ---
     const checkPerformance = (numbers) => {
-        if (!history.length) return { maxHits: 0, history: [] };
-        
-        let matchesHistory = [];
+        if (!history.length) return { maxHits: 0 };
         let maxHits = 0;
-
-        // Check last 100 draws for performance
-        const limit = Math.min(100, history.length);
+        const limit = Math.min(50, history.length); // Verifica últimos 50 para ser mais rápido
         for(let i=0; i<limit; i++) {
-            const draw = history[i];
-            const hits = numbers.filter(n => draw.Dezenas.includes(n)).length;
-            if (hits >= 11) {
-                matchesHistory.push({ concurso: draw.Concurso, hits });
-            }
+            const hits = numbers.filter(n => history[i].Dezenas.includes(n)).length;
             if (hits > maxHits) maxHits = hits;
         }
-        return { maxHits, matchesHistory };
+        return { maxHits };
     };
 
-    // RENDER CHART
+    // RENDERIZAÇÃO DO GRÁFICO
     const renderFreqChart = () => {
         if (!stats) return null;
         const maxVal = Math.max(...stats.frequencies);
-        
         return (
             <div className="h-40 flex items-end gap-1 mt-4">
                 {stats.frequencies.map((val, idx) => (
@@ -320,7 +253,6 @@ export default function App() {
                             style={{ height: `${(val / maxVal) * 100}%` }}
                         ></div>
                         <span className="text-[10px] text-gray-400 mt-1">{idx+1}</span>
-                        {/* Tooltip */}
                         <div className="absolute bottom-full mb-2 hidden group-hover:block bg-black text-xs p-1 rounded z-10 whitespace-nowrap text-white">
                             Nº {idx+1}: {val}x
                         </div>
@@ -333,7 +265,7 @@ export default function App() {
     if (loading) return (
         <div className="flex h-screen items-center justify-center bg-slate-900 text-white flex-col gap-4">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
-            <p>Conectando à base de dados...</p>
+            <p>Conectando à base de dados da Lotofácil...</p>
         </div>
     );
 
@@ -351,13 +283,14 @@ export default function App() {
                             <span className="text-xs text-emerald-400">Sistema Inteligente</span>
                         </div>
                     </div>
-                    <div className="text-right hidden md:block">
-                        <p className="text-xs text-gray-400">Último Concurso</p>
-                        <p className="font-bold text-white">#{stats?.lastDraw?.Concurso}</p>
-                    </div>
+                    {stats && (
+                        <div className="text-right hidden md:block">
+                            <p className="text-xs text-gray-400">Último Concurso</p>
+                            <p className="font-bold text-white">#{stats.lastDraw.Concurso}</p>
+                        </div>
+                    )}
                 </div>
                 
-                {/* NAVIGATION */}
                 <nav className="flex justify-center gap-1 p-2 bg-slate-900/50 overflow-x-auto">
                     {[
                         { id: 'dashboard', label: 'Dashboard', icon: 'LayoutDashboard' },
@@ -401,25 +334,17 @@ export default function App() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {/* Frequency Chart */}
                             <div className="md:col-span-2 bg-slate-800/70 backdrop-blur-md p-5 rounded-xl border border-slate-700">
                                 <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
                                     <Icon name="BarChart2" className="text-emerald-400" />
-                                    Frequência dos Números (Todos os Concursos)
+                                    Frequência dos Números
                                 </h2>
                                 {renderFreqChart()}
                             </div>
 
-                            {/* Last Result */}
                             <div className="bg-slate-800/70 backdrop-blur-md p-5 rounded-xl border border-slate-700">
                                 <h2 className="text-white font-semibold mb-4">Último Resultado (#{stats.lastDraw.Concurso})</h2>
-                                <div className="flex flex-wrap gap-2 justify-center">
-                                    {stats.lastDraw.Dezenas.map(n => (
-                                        <div key={n} className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold shadow-lg shadow-emerald-500/20">
-                                            {n}
-                                        </div>
-                                    ))}
-                                </div>
+                                <BallGroup numbers={stats.lastDraw.Dezenas} />
                                 <div className="mt-6 space-y-3">
                                     <div className="flex justify-between text-sm border-b border-slate-600 pb-2">
                                         <span className="text-gray-400">Soma Total</span>
@@ -434,44 +359,16 @@ export default function App() {
                                 </div>
                             </div>
                         </div>
-                        
-                        <div className="bg-slate-800/70 backdrop-blur-md p-5 rounded-xl border border-slate-700">
-                            <h3 className="text-white font-semibold mb-2">Destaques (Hot & Cold)</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div>
-                                    <p className="text-sm text-emerald-400 mb-2 font-bold uppercase">🔥 Números Quentes (Mais saem)</p>
-                                    <div className="flex gap-2">
-                                        {stats.hotNumbers.map(h => (
-                                            <div key={h.n} className="bg-slate-700 px-3 py-1 rounded text-sm text-white">
-                                                <span className="font-bold text-emerald-400">{h.n}</span> <span className="text-xs text-gray-500">({h.count})</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-blue-400 mb-2 font-bold uppercase">❄️ Números Frios (Menos saem)</p>
-                                    <div className="flex gap-2">
-                                        {stats.coldNumbers.map(c => (
-                                            <div key={c.n} className="bg-slate-700 px-3 py-1 rounded text-sm text-white">
-                                                <span className="font-bold text-blue-400">{c.n}</span> <span className="text-xs text-gray-500">({c.count})</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 )}
 
                 {/* VIEW: GENERATOR */}
                 {activeTab === 'generator' && (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {/* Controls */}
                         <div className="bg-slate-800/70 backdrop-blur-md p-5 rounded-xl border border-slate-700 h-fit">
                             <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                                 <Icon name="Sliders" size={18} /> Filtros do Gerador
                             </h2>
-                            
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-xs text-gray-400 mb-1">Ímpares Desejados (Média: 7-9)</label>
@@ -483,7 +380,6 @@ export default function App() {
                                     />
                                     <div className="text-right text-emerald-400 font-mono font-bold">{genFilters.oddTarget}</div>
                                 </div>
-
                                 <div>
                                     <label className="block text-xs text-gray-400 mb-1">Repetidos do Último (Média: 8-10)</label>
                                     <input 
@@ -494,87 +390,37 @@ export default function App() {
                                     />
                                     <div className="text-right text-blue-400 font-mono font-bold">{genFilters.repeatsTarget}</div>
                                 </div>
-
-                                <div>
-                                    <label className="block text-xs text-gray-400 mb-1">
-                                        Soma das Dezenas
-                                        <span className="block text-[10px] text-gray-500 leading-tight mt-1">
-                                            (IA: 90% dos jogos ficam entre 180 e 220).
-                                        </span>
-                                    </label>
-                                    <div className="flex gap-2">
-                                        <input 
-                                            type="number" className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white text-sm"
-                                            value={genFilters.sumMin}
-                                            onChange={(e) => setGenFilters({...genFilters, sumMin: parseInt(e.target.value)})}
-                                        />
-                                        <span className="text-gray-500 self-center">-</span>
-                                        <input 
-                                            type="number" className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white text-sm"
-                                            value={genFilters.sumMax}
-                                            onChange={(e) => setGenFilters({...genFilters, sumMax: parseInt(e.target.value)})}
-                                        />
-                                    </div>
-                                </div>
-
                                 <button 
                                     onClick={generateGame}
-                                    className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-lg shadow-lg shadow-emerald-900/50 flex items-center justify-center gap-2 transition-all transform active:scale-95"
+                                    className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-lg shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95"
                                 >
-                                    <Icon name="Wand2" size={18} />
-                                    Gerar Jogo Otimizado
+                                    <Icon name="Wand2" size={18} /> Gerar Jogo
                                 </button>
                             </div>
                         </div>
 
-                        {/* Results */}
                         <div className="md:col-span-2 space-y-4">
-                            <h2 className="text-white font-semibold">Jogos Gerados (Sessão Atual)</h2>
-                            
-                            {generatedGames.length === 0 ? (
-                                <div className="text-center py-10 text-gray-500 bg-slate-800/70 rounded-xl border border-dashed border-slate-700">
-                                    Configure os filtros e clique em Gerar
-                                </div>
-                            ) : (
-                                generatedGames.map((game, idx) => {
-                                    const sim = checkPerformance(game.numbers);
-                                    return (
-                                        <div key={game.id} className="bg-slate-800/70 backdrop-blur-md p-4 rounded-xl border-l-4 border-emerald-500 animate-pulse-once">
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="bg-emerald-900 text-emerald-300 text-xs px-2 py-1 rounded font-bold">JOGO {idx + 1}</span>
-                                                    <span className="text-xs text-gray-400">Soma: {game.meta.sum} | Ímpares: {game.meta.odds} | Repetidos: {game.meta.repeats}</span>
-                                                </div>
-                                                <button 
-                                                    onClick={() => saveGame(game)}
-                                                    className="text-gray-400 hover:text-emerald-400 transition-colors"
-                                                    title="Salvar Jogo"
-                                                >
-                                                    <Icon name="BookmarkPlus" size={20} />
-                                                </button>
+                            <h2 className="text-white font-semibold">Jogos Gerados</h2>
+                            {generatedGames.map((game, idx) => {
+                                const sim = checkPerformance(game.numbers);
+                                return (
+                                    <div key={game.id} className="bg-slate-800/70 backdrop-blur-md p-4 rounded-xl border-l-4 border-emerald-500 animate-pulse-once">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="bg-emerald-900 text-emerald-300 text-xs px-2 py-1 rounded font-bold">JOGO {idx + 1}</span>
+                                                <span className="text-xs text-gray-400">Soma: {game.meta.sum} | Ímp: {game.meta.odds} | Rep: {game.meta.repeats}</span>
                                             </div>
-                                            
-                                            <BallGroup numbers={game.numbers} size="sm" />
-                                            
-                                            <div className="mt-3 pt-3 border-t border-slate-700/50">
-                                                <div className="flex items-center justify-between">
-                                                    <p className="text-xs text-gray-400 flex items-center gap-1">
-                                                        <Icon name="History" size={12} />
-                                                        Performance Histórica (últimos 100):
-                                                    </p>
-                                                    {sim.maxHits >= 14 ? (
-                                                        <span className="text-amber-400 text-xs font-bold">🏆 Teria feito {sim.maxHits} pontos!</span>
-                                                    ) : sim.maxHits >= 11 ? (
-                                                        <span className="text-emerald-400 text-xs font-bold">✅ Teria feito {sim.maxHits} pontos</span>
-                                                    ) : (
-                                                        <span className="text-gray-500 text-xs">Máx. {sim.maxHits} acertos</span>
-                                                    )}
-                                                </div>
-                                            </div>
+                                            <button onClick={() => saveGame(game)} className="text-gray-400 hover:text-emerald-400">
+                                                <Icon name="BookmarkPlus" size={20} />
+                                            </button>
                                         </div>
-                                    );
-                                })
-                            )}
+                                        <BallGroup numbers={game.numbers} size="sm" />
+                                        <div className="mt-2 text-xs text-gray-500">
+                                            Max. acertos (últimos 50): <span className="text-emerald-400 font-bold">{sim.maxHits}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}
@@ -584,34 +430,20 @@ export default function App() {
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
                             <h2 className="text-xl font-bold text-white">Meus Jogos Salvos ({savedGames.length})</h2>
-                            <button 
-                                onClick={exportGames}
-                                className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2"
-                            >
+                            <button onClick={exportGames} className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2">
                                 <Icon name="Download" size={16} /> Exportar
                             </button>
                         </div>
-
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {savedGames.map((game, i) => (
                                 <div key={game.id} className="bg-slate-800/70 backdrop-blur-md p-4 rounded-xl relative group border border-slate-700">
-                                    <button 
-                                        onClick={() => deleteSavedGame(game.id)}
-                                        className="absolute top-2 right-2 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-2"
-                                    >
+                                    <button onClick={() => deleteSavedGame(game.id)} className="absolute top-2 right-2 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-2">
                                         <Icon name="Trash2" size={16} />
                                     </button>
                                     <div className="mb-2 text-xs text-gray-400 font-bold">JOGO #{i+1}</div>
                                     <BallGroup numbers={game.numbers} />
-                                    <div className="mt-3 flex gap-4 text-xs text-gray-500">
-                                        <span>Soma: {game.meta.sum}</span>
-                                        <span>Ímp: {game.meta.odds}</span>
-                                    </div>
                                 </div>
                             ))}
-                            {savedGames.length === 0 && (
-                                <p className="text-gray-500 col-span-2 text-center py-10">Nenhum jogo salvo ainda.</p>
-                            )}
                         </div>
                     </div>
                 )}
@@ -624,7 +456,7 @@ export default function App() {
                                 <thead className="bg-slate-900 text-gray-200 uppercase font-medium">
                                     <tr>
                                         <th className="px-6 py-3">Concurso</th>
-                                        <th className="px-6 py-3">Dezenas Sorteadas</th>
+                                        <th className="px-6 py-3">Dezenas</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-700">
@@ -632,21 +464,12 @@ export default function App() {
                                         <tr key={row.Concurso} className="hover:bg-slate-800/50">
                                             <td className="px-6 py-4 font-bold text-white">#{row.Concurso}</td>
                                             <td className="px-6 py-4">
-                                                <div className="flex gap-1 flex-wrap">
-                                                    {row.Dezenas.map(n => (
-                                                        <span key={n} className="inline-block w-6 text-center bg-slate-700 text-emerald-400 rounded text-xs font-bold py-0.5">
-                                                            {n}
-                                                        </span>
-                                                    ))}
-                                                </div>
+                                                <BallGroup numbers={row.Dezenas} size="sm" />
                                             </td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
-                        </div>
-                        <div className="p-4 text-center text-xs text-gray-500 bg-slate-900">
-                            Mostrando últimos 50 registros. Total carregado: {history.length}.
                         </div>
                     </div>
                 )}
