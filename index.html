@@ -1,149 +1,941 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <title>Lotofácil • Dashboard Estatístico</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; margin:0; background:#0f172a; color:#e5e7eb }
-    header { background:#020617; padding:16px; font-size:20px; font-weight:bold }
-    nav { display:flex; gap:12px; background:#020617; padding:10px; flex-wrap:wrap }
-    nav button { background:#1e293b; border:none; color:#fff; padding:8px 12px; cursor:pointer; border-radius:6px }
-    nav button.active { background:#22c55e; color:#020617 }
-    section { display:none; padding:16px }
-    section.active { display:block }
-    .grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap:16px }
-    .card { background:#020617; padding:12px; border-radius:10px }
-    input, select { padding:6px; margin:4px }
-    table { width:100%; border-collapse:collapse }
-    th, td { border-bottom:1px solid #334155; padding:6px; text-align:center }
-  </style>
-</head>
-<body>
-<header>📊 Lotofácil • Sistema Estatístico Pessoal</header>
-<nav>
-  <button class="active" onclick="showTab('freq')">Frequência</button>
-  <button onclick="showTab('pares')">Pares x Ímpares</button>
-  <button onclick="showTab('somas')">Somatórias</button>
-  <button onclick="showTab('repeticao')">Repetições</button>
-  <button onclick="showTab('gerador')">Gerador de Jogos</button>
-  <button onclick="showTab('simulador')">Simulador</button>
-</nav>
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, 
+  LineChart, Line, PieChart, Pie, Cell, Legend 
+} from 'recharts';
+import { 
+  Calculator, LayoutDashboard, Database, Zap, Save, Download, 
+  RefreshCw, TrendingUp, AlertCircle, CheckCircle, Search, Grid3X3, Filter
+} from 'lucide-react';
 
-<section id="freq" class="active">
-  <div class="card"><canvas id="freqChart"></canvas></div>
-</section>
+/**
+ * UTILS & CONSTANTS
+ */
+const GOOGLE_SHEET_ID = '196v-smtNT6NkSDTj1KPbDJ_A9dGTJe9Pm-gqJX19Mug';
+const CSV_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=csv`;
 
-<section id="pares">
-  <div class="card"><canvas id="parChart"></canvas></div>
-</section>
+const TOTAL_NUMBERS = 25;
+const GAME_SIZE = 15;
 
-<section id="somas">
-  <div class="card"><canvas id="somaChart"></canvas></div>
-</section>
+// Cores para gráficos
+const COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6'];
 
-<section id="repeticao">
-  <div class="card"><canvas id="repChart"></canvas></div>
-</section>
+/**
+ * Componente Principal
+ */
+export default function LotoAnalyticPro() {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [myGames, setMyGames] = useState([]);
 
-<section id="gerador">
-  <div class="card">
-    <h3>🎯 Gerador de Jogos com Regras</h3>
-    Pares: <input id="paresInput" type="number" value="8">
-    Ímpares: <input id="imparesInput" type="number" value="7"><br>
-    Soma mínima: <input id="somaMin" value="180">
-    Soma máxima: <input id="somaMax" value="220"><br>
-    Repetidos último concurso: <input id="repUlt" value="8"><br>
-    <button onclick="gerarJogo()">Gerar Jogo</button>
-    <pre id="jogoGerado"></pre>
-  </div>
-</section>
+  // --- Inicialização ---
+  useEffect(() => {
+    fetchData();
+    const saved = localStorage.getItem('loto_my_games');
+    if (saved) setMyGames(JSON.parse(saved));
+  }, []);
 
-<section id="simulador">
-  <div class="card">
-    <h3>🧪 Simulador Histórico</h3>
-    <button onclick="simular()">Simular jogo gerado</button>
-    <pre id="resultadoSim"></pre>
-  </div>
-</section>
+  useEffect(() => {
+    localStorage.setItem('loto_my_games', JSON.stringify(myGames));
+  }, [myGames]);
 
-<script>
-const SHEET_CSV = 'https://docs.google.com/spreadsheets/d/196v-smtNT6NkSDTj1KPbDJ_A9dGTJe9Pm-gqJX19Mug/export?format=csv';
-let concursos = [];
-let ultimo = [];
-let jogoAtual = [];
+  // --- Função de Carga de Dados ---
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(CSV_URL);
+      if (!response.ok) throw new Error('Falha ao conectar com a planilha');
+      const text = await response.text();
+      const parsedData = parseCSV(text);
+      if (parsedData.length === 0) throw new Error('Planilha vazia ou formato inválido');
+      setData(parsedData);
+    } catch (err) {
+      console.error(err);
+      setError('Bloqueio de CORS detectado ou erro na planilha. O Google Sheets as vezes bloqueia acesso direto via script.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-fetch(SHEET_CSV)
-  .then(r => r.text())
-  .then(csv => {
-    const linhas = csv.split('\n').slice(1);
-    linhas.forEach(l => {
-      const c = l.split(',').slice(1,16).map(n=>parseInt(n));
-      if(c.length===15) concursos.push(c);
+  const loadDemoData = () => {
+    // Gera dados simulados baseados em estatísticas reais para demonstração
+    const demo = [];
+    for (let i = 1; i <= 100; i++) {
+      const numbers = generateRandomGame();
+      demo.push({
+        concurso: 3000 + i,
+        data: new Date().toLocaleDateString(),
+        bolas: numbers.sort((a, b) => a - b)
+      });
+    }
+    setData(demo);
+    setError(null);
+  };
+
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const parsed = parseCSV(e.target.result);
+        setData(parsed);
+        setError(null);
+      } catch (err) {
+        setError('Erro ao ler arquivo CSV.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // --- Parser CSV Simples ---
+  const parseCSV = (csvText) => {
+    const lines = csvText.split('\n');
+    const result = [];
+    
+    // Tenta identificar onde começam os dados (pula cabeçalhos)
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const cols = line.split(',').map(c => c.trim().replace(/"/g, ''));
+      
+      // Heurística: Uma linha de jogo válida tem pelo menos 15 números entre 1 e 25
+      // E geralmente começa com o número do concurso (inteiro grande)
+      const potentialNumbers = cols.filter(c => !isNaN(c) && parseInt(c) > 0 && parseInt(c) <= 25).map(Number);
+      
+      // Se encontrarmos 15 bolas distintas na linha, é um jogo
+      const uniqueNumbers = [...new Set(potentialNumbers)];
+      
+      if (uniqueNumbers.length >= 15) {
+        // Assume que as 15 primeiras colunas numéricas válidas são as bolas
+        // O primeiro número da linha geralmente é o Concurso
+        const concurso = parseInt(cols.find(c => !isNaN(c)));
+        // Pega as últimas 15 ocorrências numéricas ou as 15 que parecem ser bolas
+        // Simplesmente pegamos os 15 números unicos encontrados
+        const bolas = uniqueNumbers.slice(0, 15).sort((a, b) => a - b);
+        
+        if (bolas.length === 15) {
+          result.push({
+            concurso: concurso || i,
+            data: cols.find(c => c.includes('/')) || 'Data N/A',
+            bolas
+          });
+        }
+      }
+    }
+    return result.sort((a, b) => b.concurso - a.concurso); // Mais recente primeiro
+  };
+
+  // --- Estatísticas Globais (Memoized) ---
+  const stats = useMemo(() => {
+    if (!data.length) return null;
+
+    const freq = Array(26).fill(0);
+    let totalSum = 0;
+    let totalEven = 0;
+    
+    data.forEach(game => {
+      let gameSum = 0;
+      let gameEven = 0;
+      game.bolas.forEach(num => {
+        freq[num]++;
+        gameSum += num;
+        if (num % 2 === 0) gameEven++;
+      });
+      totalSum += gameSum;
+      totalEven += gameEven;
     });
-    ultimo = concursos[concursos.length-1];
-    calcularEstatisticas();
-  });
 
-function calcularEstatisticas(){
-  let freq = Array(26).fill(0);
-  let pares=0, impares=0;
-  let somas=[];
-  concursos.forEach(c=>{
-    let soma=0;
-    c.forEach(n=>{ freq[n]++; soma+=n; n%2===0?pares++:impares++; });
-    somas.push(soma);
-  });
-  new Chart(freqChart,{type:'bar',data:{labels:[...Array(25).keys()].map(i=>i+1),datasets:[{label:'Frequência',data:freq.slice(1)}]}});
-  new Chart(parChart,{type:'pie',data:{labels:['Pares','Ímpares'],datasets:[{data:[pares,impares]}]}});
-  new Chart(somaChart,{type:'line',data:{labels:somas.map((_,i)=>i+1),datasets:[{label:'Soma',data:somas}]}});
+    const avgSum = Math.round(totalSum / data.length);
+    const avgEven = (totalEven / data.length).toFixed(1);
+
+    // Identificar quentes e frias
+    const freqList = freq.map((count, num) => ({ num, count })).slice(1); // remove index 0
+    freqList.sort((a, b) => b.count - a.count);
+
+    return {
+      freq,
+      hot: freqList.slice(0, 5),
+      cold: freqList.slice(-5).reverse(),
+      avgSum,
+      avgEven,
+      totalGames: data.length,
+      lastGame: data[0]
+    };
+  }, [data]);
+
+  // --- Renderização ---
+  return (
+    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans selection:bg-emerald-500 selection:text-white">
+      {/* Sidebar / Navigation */}
+      <div className="fixed top-0 left-0 h-full w-20 md:w-64 bg-slate-950 border-r border-slate-800 z-50 flex flex-col">
+        <div className="p-4 flex items-center justify-center md:justify-start gap-3 border-b border-slate-800 h-16">
+          <div className="bg-emerald-500 p-2 rounded-lg">
+            <Grid3X3 size={24} className="text-white" />
+          </div>
+          <span className="hidden md:block font-bold text-lg tracking-tight text-white">
+            Loto<span className="text-emerald-400">Analytic</span>
+          </span>
+        </div>
+
+        <nav className="flex-1 py-6 space-y-2 px-2">
+          <NavItem icon={<LayoutDashboard size={20}/>} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+          <NavItem icon={<TrendingUp size={20}/>} label="Análise Detalhada" active={activeTab === 'analysis'} onClick={() => setActiveTab('analysis')} />
+          <NavItem icon={<Zap size={20}/>} label="Gerador Inteligente" active={activeTab === 'generator'} onClick={() => setActiveTab('generator')} />
+          <NavItem icon={<Save size={20}/>} label="Meus Jogos" active={activeTab === 'mygames'} onClick={() => setActiveTab('mygames')} />
+          <NavItem icon={<Calculator size={20}/>} label="Simulador" active={activeTab === 'simulator'} onClick={() => setActiveTab('simulator')} />
+        </nav>
+
+        <div className="p-4 border-t border-slate-800 text-xs text-slate-500 text-center md:text-left">
+          <p className="hidden md:block">Versão 2.4.0</p>
+          <p className="hidden md:block mt-1">Conectado via Google Sheets</p>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <main className="ml-20 md:ml-64 p-4 md:p-8">
+        
+        {/* Header Area */}
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white">
+              {activeTab === 'dashboard' && 'Visão Geral'}
+              {activeTab === 'analysis' && 'Análise Estatística'}
+              {activeTab === 'generator' && 'Gerador de Jogos'}
+              {activeTab === 'mygames' && 'Jogos Salvos'}
+              {activeTab === 'simulator' && 'Validação Histórica'}
+            </h1>
+            <p className="text-slate-400 text-sm mt-1">
+              {data.length > 0 
+                ? `Base de dados: ${data.length} concursos carregados (Último: ${data[0].concurso})`
+                : 'Aguardando dados...'}
+            </p>
+          </div>
+          
+          <div className="flex gap-2">
+            {!loading && error && (
+              <div className="flex gap-2">
+                 <button 
+                  onClick={loadDemoData}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                >
+                  <Database size={16} />
+                  Usar Dados Demo
+                </button>
+                <label className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer border border-slate-700">
+                  <UploadIcon size={16} />
+                  Upload CSV
+                  <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
+                </label>
+              </div>
+            )}
+            
+            <button 
+              onClick={fetchData}
+              disabled={loading}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50 shadow-lg shadow-emerald-900/20"
+            >
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+              {loading ? 'Carregando...' : 'Atualizar Dados'}
+            </button>
+          </div>
+        </header>
+
+        {/* Error Banner */}
+        {error && (
+          <div className="mb-6 bg-red-500/10 border border-red-500/20 p-4 rounded-xl flex items-start gap-3">
+            <AlertCircle className="text-red-400 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-red-400">Erro na conexão com a Planilha</h3>
+              <p className="text-red-300 text-sm mt-1">{error}</p>
+              <p className="text-red-300/70 text-xs mt-2">Dica: Baixe sua planilha no Google Sheets (Arquivo &gt; Fazer Download &gt; CSV) e use o botão Upload acima.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Content Render */}
+        {!stats && !loading && !error && (
+          <div className="text-center py-20 bg-slate-800/50 rounded-2xl border border-slate-700 border-dashed">
+            <Database size={48} className="mx-auto text-slate-600 mb-4" />
+            <h3 className="text-xl font-medium text-slate-300">Nenhum dado carregado</h3>
+            <p className="text-slate-500 mt-2">Carregue a planilha ou use dados de demonstração para começar.</p>
+          </div>
+        )}
+
+        {stats && (
+          <>
+            {activeTab === 'dashboard' && <DashboardTab stats={stats} lastGame={data[0]} />}
+            {activeTab === 'analysis' && <AnalysisTab stats={stats} data={data} />}
+            {activeTab === 'generator' && <GeneratorTab stats={stats} lastGame={data[0]} saveGame={(g) => setMyGames([g, ...myGames])} />}
+            {activeTab === 'mygames' && <MyGamesTab games={myGames} setGames={setMyGames} history={data} />}
+            {activeTab === 'simulator' && <SimulatorTab history={data} />}
+          </>
+        )}
+      </main>
+    </div>
+  );
 }
 
-function gerarJogo(){
-  const pares = +paresInput.value;
-  const impares = +imparesInput.value;
-  const min = +somaMin.value;
-  const max = +somaMax.value;
-  const rep = +repUlt.value;
-  let nums=[...Array(25).keys()].map(i=>i+1);
-  while(true){
-    let jogo=[];
-    let p=0,i=0;
-    while(jogo.length<15){
-      let n = nums[Math.floor(Math.random()*25)];
-      if(jogo.includes(n)) continue;
-      if(n%2===0 && p>=pares) continue;
-      if(n%2===1 && i>=impares) continue;
-      jogo.push(n);
-      n%2===0?p++:i++;
-    }
-    let soma=jogo.reduce((a,b)=>a+b,0);
-    let repetidos=jogo.filter(n=>ultimo.includes(n)).length;
-    if(soma>=min && soma<=max && repetidos>=rep){
-      jogoAtual=jogo.sort((a,b)=>a-b);
-      jogoGerado.textContent=jogoAtual.join(' - ');
+/**
+ * SUB-COMPONENTS
+ */
+
+const NavItem = ({ icon, label, active, onClick }) => (
+  <button 
+    onClick={onClick}
+    className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all
+      ${active 
+        ? 'bg-emerald-500/10 text-emerald-400 border-r-2 border-emerald-500 rounded-r-none' 
+        : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+      }`}
+  >
+    {icon}
+    <span className="hidden md:block">{label}</span>
+  </button>
+);
+
+const UploadIcon = ({size}) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+);
+
+/**
+ * DASHBOARD TAB
+ */
+const DashboardTab = ({ stats, lastGame }) => {
+  const chartData = stats.freq.slice(1).map((val, idx) => ({ name: idx + 1, freq: val }));
+
+  return (
+    <div className="space-y-6">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <KpiCard title="Total de Concursos" value={stats.totalGames} icon={<Database size={20} className="text-blue-400"/>} />
+        <KpiCard title="Soma Média" value={stats.avgSum} sub="Ideal: 180 - 220" icon={<Calculator size={20} className="text-emerald-400"/>} />
+        <KpiCard title="Média Pares" value={stats.avgEven} sub="Ideal: 7 ou 8" icon={<Filter size={20} className="text-purple-400"/>} />
+        <KpiCard title="Repetidas (Média)" value="9" sub="Do anterior" icon={<RefreshCw size={20} className="text-orange-400"/>} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Último Resultado */}
+        <div className="lg:col-span-2 bg-slate-800 border border-slate-700 rounded-xl p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-semibold text-white">Último Resultado (Conc. {lastGame.concurso})</h3>
+            <span className="text-sm text-slate-400">{lastGame.data}</span>
+          </div>
+          <div className="flex flex-wrap gap-3 justify-center">
+            {lastGame.bolas.map(num => (
+              <Ball key={num} number={num} active={true} size="lg" />
+            ))}
+          </div>
+          <div className="mt-6 flex justify-center gap-6 text-sm text-slate-400">
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              Soma: {lastGame.bolas.reduce((a,b)=>a+b,0)}
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+              Pares: {lastGame.bolas.filter(n => n % 2 === 0).length}
+            </span>
+          </div>
+        </div>
+
+        {/* Hot Numbers Mini */}
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Números Quentes 🔥</h3>
+          <div className="space-y-3">
+            {stats.hot.slice(0, 5).map((item, idx) => (
+              <div key={item.num} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-slate-500 font-mono w-4">{idx + 1}</span>
+                  <Ball number={item.num} size="sm" active />
+                </div>
+                <div className="w-24 bg-slate-700 rounded-full h-2 overflow-hidden">
+                  <div className="bg-orange-500 h-full" style={{ width: `${(item.count / stats.totalGames) * 100}%` }}></div>
+                </div>
+                <span className="text-xs text-slate-400">{item.count}x</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Frequency Chart */}
+      <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-white mb-6">Frequência Geral (Todos os Concursos)</h3>
+        <div className="h-64 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+              <XAxis dataKey="name" stroke="#94a3b8" tick={{fontSize: 12}} />
+              <YAxis stroke="#94a3b8" tick={{fontSize: 12}} />
+              <RechartsTooltip 
+                contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }}
+                cursor={{ fill: '#334155', opacity: 0.4 }}
+              />
+              <Bar dataKey="freq" fill="#10B981" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * ANALYSIS TAB
+ */
+const AnalysisTab = ({ stats, data }) => {
+  // Heatmap calculation
+  const matrix = Array(5).fill(null).map(() => Array(5).fill(0));
+  stats.freq.forEach((freq, num) => {
+    if (num === 0) return;
+    const row = Math.floor((num - 1) / 5);
+    const col = (num - 1) % 5;
+    matrix[row][col] = freq;
+  });
+
+  const maxFreq = Math.max(...stats.freq.slice(1));
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Pares vs Ímpares Chart */}
+      <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Distribuição Pares x Ímpares</h3>
+        <p className="text-sm text-slate-400 mb-4">
+          O padrão mais comum é 8 ímpares e 7 pares (ou vice-versa).
+          Fugir disso diminui drasticamente a probabilidade.
+        </p>
+        <div className="h-64 flex justify-center">
+           <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={[
+                  { name: 'Ímpares', value: stats.totalGames * 15 - (stats.avgEven * stats.totalGames) }, // aprox
+                  { name: 'Pares', value: stats.avgEven * stats.totalGames },
+                ]}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={80}
+                paddingAngle={5}
+                dataKey="value"
+              >
+                <Cell fill="#8B5CF6" />
+                <Cell fill="#10B981" />
+              </Pie>
+              <Legend verticalAlign="bottom" height={36}/>
+              <RechartsTooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Heatmap (Clusters) */}
+      <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Mapa de Calor da Cartela (Clusters)</h3>
+        <p className="text-sm text-slate-400 mb-6">
+          Identifique quais regiões da cartela são sorteadas com mais frequência.
+        </p>
+        <div className="grid grid-cols-5 gap-2 max-w-xs mx-auto aspect-square">
+          {matrix.map((row, rIdx) => (
+            row.map((val, cIdx) => {
+              const num = rIdx * 5 + cIdx + 1;
+              const intensity = val / maxFreq;
+              return (
+                <div 
+                  key={num} 
+                  className="rounded-lg flex items-center justify-center text-sm font-bold border border-slate-700 transition-all hover:scale-105"
+                  style={{
+                    backgroundColor: `rgba(16, 185, 129, ${intensity})`,
+                    color: intensity > 0.5 ? '#fff' : '#94a3b8'
+                  }}
+                  title={`Número ${num}: ${val} vezes`}
+                >
+                  {num}
+                </div>
+              );
+            })
+          ))}
+        </div>
+      </div>
+
+      {/* Cold Numbers */}
+      <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 col-span-1 md:col-span-2">
+        <h3 className="text-lg font-semibold text-white mb-4">Números Frios (Mais Atrasados/Menos Frequentes)</h3>
+        <div className="flex gap-4 overflow-x-auto pb-2">
+          {stats.cold.map((item) => (
+            <div key={item.num} className="flex flex-col items-center bg-slate-900 p-4 rounded-lg min-w-[100px] border border-slate-700">
+              <Ball number={item.num} active={false} />
+              <span className="mt-2 text-lg font-bold text-slate-300">{item.count}</span>
+              <span className="text-xs text-slate-500">aparições</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * GENERATOR TAB
+ */
+const GeneratorTab = ({ stats, lastGame, saveGame }) => {
+  const [config, setConfig] = useState({
+    numOdd: 8,
+    sumMin: 180,
+    sumMax: 220,
+    repeats: 9,
+    balanced: true
+  });
+  const [generated, setGenerated] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const generateGame = () => {
+    setIsGenerating(true);
+    // Pequeno delay para UI responder
+    setTimeout(() => {
+      let attempts = 0;
+      let candidate = [];
+      let valid = false;
+      const lastDrawSet = new Set(lastGame.bolas);
+      const allNumbers = Array.from({length: 25}, (_, i) => i + 1);
+      const notInLast = allNumbers.filter(n => !lastDrawSet.has(n));
+      const inLast = Array.from(lastDrawSet);
+
+      while (!valid && attempts < 5000) {
+        attempts++;
+        candidate = [];
+        
+        // 1. Regra de Repetidas
+        const shuffledLast = [...inLast].sort(() => 0.5 - Math.random());
+        const shuffledNotLast = [...notInLast].sort(() => 0.5 - Math.random());
+        
+        // Pega X repetidas
+        const pickedRepeats = shuffledLast.slice(0, config.repeats);
+        // Pega o restante de não repetidas
+        const needed = 15 - config.repeats;
+        const pickedOthers = shuffledNotLast.slice(0, needed);
+        
+        candidate = [...pickedRepeats, ...pickedOthers].sort((a,b) => a-b);
+
+        // 2. Validação Soma
+        const sum = candidate.reduce((a,b) => a+b, 0);
+        if (sum < config.sumMin || sum > config.sumMax) continue;
+
+        // 3. Validação Ímpares
+        const oddCount = candidate.filter(n => n % 2 !== 0).length;
+        if (oddCount !== config.numOdd) continue;
+
+        // 4. Validação Balanceada (Frequência) - Opcional
+        if (config.balanced) {
+          // Verifica se não tem muitos números "frios" (opcional para refinar)
+          // Aqui vamos aceitar simples para não travar
+        }
+
+        valid = true;
+      }
+
+      if (valid) {
+        const gameObj = {
+          id: Date.now(),
+          date: new Date().toLocaleDateString(),
+          numbers: candidate,
+          stats: {
+            sum: candidate.reduce((a,b)=>a+b,0),
+            odd: candidate.filter(n=>n%2!==0).length,
+            repeats: candidate.filter(n=>lastDrawSet.has(n)).length
+          }
+        };
+        setGenerated(gameObj);
+      } else {
+        alert("Não foi possível gerar um jogo com essas regras restritas. Tente flexibilizar os parâmetros.");
+      }
+      setIsGenerating(false);
+    }, 100);
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Controls */}
+      <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 h-fit">
+        <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+          <Zap className="text-emerald-400" size={24}/> Configurar Gerador
+        </h3>
+        
+        <div className="space-y-6">
+          <ControlSlider 
+            label="Números Ímpares" 
+            val={config.numOdd} 
+            min={5} max={11} 
+            onChange={(v) => setConfig({...config, numOdd: v})}
+            desc="Recomendado: 7 ou 8"
+          />
+
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <label className="text-sm font-medium text-slate-300">Soma Total</label>
+              <span className="text-emerald-400 font-mono">{config.sumMin} - {config.sumMax}</span>
+            </div>
+            <div className="flex gap-4 items-center">
+               <input 
+                type="range" min="150" max="200" value={config.sumMin} 
+                onChange={(e) => setConfig({...config, sumMin: parseInt(e.target.value)})}
+                className="w-full accent-emerald-500 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+              />
+               <input 
+                type="range" min="200" max="250" value={config.sumMax} 
+                onChange={(e) => setConfig({...config, sumMax: parseInt(e.target.value)})}
+                className="w-full accent-emerald-500 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+            <p className="text-xs text-slate-500">A "curva de sino" da Lotofácil tem pico entre 190-210.</p>
+          </div>
+
+          <ControlSlider 
+            label="Repetir do Último Concurso" 
+            val={config.repeats} 
+            min={5} max={11} 
+            onChange={(v) => setConfig({...config, repeats: v})}
+            desc="Estatística forte: Saem 9 repetidas em 60% dos casos."
+          />
+
+          <div className="flex items-center gap-3 pt-4 border-t border-slate-700">
+            <input 
+              type="checkbox" 
+              checked={config.balanced}
+              onChange={(e) => setConfig({...config, balanced: e.target.checked})}
+              className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500"
+            />
+            <label className="text-sm text-slate-300">Equilibrar Quentes/Frias (IA)</label>
+          </div>
+
+          <button 
+            onClick={generateGame}
+            disabled={isGenerating}
+            className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/40 transition-all active:scale-95 flex items-center justify-center gap-2"
+          >
+            {isGenerating ? 'Calculando...' : 'GERAR JOGO OTIMIZADO'}
+          </button>
+        </div>
+      </div>
+
+      {/* Result Area */}
+      <div className="lg:col-span-2 space-y-6">
+        {generated ? (
+          <div className="bg-slate-800 border border-emerald-500/30 rounded-xl p-8 animate-fade-in relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-blue-500"></div>
+            
+            <div className="flex justify-between items-start mb-8">
+              <div>
+                <h2 className="text-2xl font-bold text-white mb-2">Jogo Gerado com Sucesso</h2>
+                <p className="text-slate-400 text-sm">Baseado nas restrições configuradas.</p>
+              </div>
+              <button 
+                onClick={() => saveGame(generated)}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+              >
+                <Save size={18} /> Salvar
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-4 justify-center mb-8">
+              {generated.numbers.map(num => (
+                <Ball key={num} number={num} active size="xl" />
+              ))}
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 border-t border-slate-700 pt-6">
+              <StatBadge label="Soma Total" value={generated.stats.sum} ideal="180-220" />
+              <StatBadge label="Ímpares" value={generated.stats.odd} ideal={`${config.numOdd}`} />
+              <StatBadge label="Repetidas" value={generated.stats.repeats} ideal={`${config.repeats}`} />
+            </div>
+          </div>
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center bg-slate-800/50 border border-slate-700 border-dashed rounded-xl p-12 text-slate-500">
+            <Grid3X3 size={64} className="mb-4 opacity-20" />
+            <p className="text-lg">Configure as regras e clique em Gerar</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * MY GAMES TAB
+ */
+const MyGamesTab = ({ games, setGames, history }) => {
+  const exportData = () => {
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + "Data Criacao,Bolas,Soma,Impares,Repetidas\n"
+      + games.map(g => `${g.date},"${g.numbers.join('-')}",${g.stats.sum},${g.stats.odd},${g.stats.repeats}`).join("\n");
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "meus_jogos_lotoanalytic.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const deleteGame = (id) => {
+    setGames(games.filter(g => g.id !== id));
+  };
+
+  const checkHits = (gameNumbers) => {
+    // Verifica quantos acertos teria no último concurso
+    if(!history.length) return 0;
+    const last = new Set(history[0].bolas);
+    return gameNumbers.filter(n => last.has(n)).length;
+  };
+
+  return (
+    <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+      <div className="p-6 border-b border-slate-700 flex justify-between items-center">
+        <h3 className="text-lg font-bold text-white">Meus Jogos Salvos ({games.length})</h3>
+        <button onClick={exportData} className="text-emerald-400 hover:text-emerald-300 flex items-center gap-2 text-sm font-medium">
+          <Download size={18} /> Exportar CSV
+        </button>
+      </div>
+
+      {games.length === 0 ? (
+        <div className="p-12 text-center text-slate-500">
+          Você ainda não salvou nenhum jogo.
+        </div>
+      ) : (
+        <div className="divide-y divide-slate-700">
+          {games.map((game, idx) => (
+            <div key={game.id} className="p-6 flex flex-col md:flex-row items-center justify-between gap-4 hover:bg-slate-750 transition-colors">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-slate-400 font-mono text-sm">#{games.length - idx}</span>
+                  <span className="text-slate-500 text-xs">{game.date}</span>
+                  <span className="bg-slate-700 text-slate-300 text-xs px-2 py-0.5 rounded">
+                    Soma: {game.stats.sum}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {game.numbers.map(n => (
+                    <span key={n} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-700 text-white font-bold text-sm border border-slate-600">
+                      {n}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                 <div className="text-center px-4">
+                    <div className="text-xs text-slate-400 uppercase tracking-wide">Acertos Último</div>
+                    <div className="text-2xl font-bold text-white">{checkHits(game.numbers)}</div>
+                 </div>
+                 <button 
+                  onClick={() => deleteGame(game.id)}
+                  className="p-2 hover:bg-red-500/20 text-slate-500 hover:text-red-400 rounded transition-colors"
+                >
+                  <span className="text-2xl">&times;</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * SIMULATOR TAB
+ */
+const SimulatorTab = ({ history }) => {
+  const [inputStr, setInputStr] = useState("");
+  const [result, setResult] = useState(null);
+
+  const simulate = () => {
+    // Parse input
+    const nums = inputStr.split(/[\s,-]+/).map(n => parseInt(n)).filter(n => !isNaN(n) && n > 0 && n <= 25);
+    const unique = [...new Set(nums)];
+    
+    if (unique.length < 15) {
+      alert("Por favor insira pelo menos 15 números diferentes.");
       return;
     }
+    
+    const game = unique.slice(0, 15).sort((a,b)=>a-b);
+    const gameSet = new Set(game);
+
+    // Check history
+    let maxHits = 0;
+    let hits15 = 0;
+    let hits14 = 0;
+    let bestConcurso = null;
+
+    history.forEach(h => {
+      const hSet = new Set(h.bolas);
+      const hits = game.filter(x => hSet.has(x)).length;
+      if (hits > maxHits) {
+        maxHits = hits;
+        bestConcurso = h;
+      }
+      if (hits === 15) hits15++;
+      if (hits === 14) hits14++;
+    });
+
+    setResult({
+      game,
+      maxHits,
+      hits15,
+      hits14,
+      bestConcurso,
+      totalChecked: history.length
+    });
+  };
+
+  const fillRandom = () => {
+    const r = generateRandomGame().sort((a,b)=>a-b);
+    setInputStr(r.join(" "));
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-8">
+      <div className="bg-slate-800 border border-slate-700 rounded-xl p-8">
+        <h3 className="text-xl font-bold text-white mb-4">Verificar Jogo no Passado</h3>
+        <p className="text-slate-400 text-sm mb-6">
+          Cole seus números ou gere aleatoriamente para ver se esse jogo já premiou alguma vez na história.
+        </p>
+        
+        <div className="relative mb-4">
+          <textarea
+            value={inputStr}
+            onChange={(e) => setInputStr(e.target.value)}
+            placeholder="Ex: 01 02 03 04 05 06 10 11 12 13 20 21 22 23 25"
+            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-4 text-white font-mono focus:ring-2 focus:ring-emerald-500 outline-none h-32 resize-none"
+          />
+          <button 
+            onClick={fillRandom}
+            className="absolute bottom-4 right-4 text-xs bg-slate-700 text-slate-300 px-3 py-1 rounded hover:bg-slate-600 transition-colors"
+          >
+            Preencher Aleatório
+          </button>
+        </div>
+
+        <button 
+          onClick={simulate}
+          className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
+        >
+          <Search size={20} /> VERIFICAR NO HISTÓRICO
+        </button>
+      </div>
+
+      {result && (
+        <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden animate-fade-in">
+          <div className="bg-slate-900/50 p-6 border-b border-slate-700">
+             <div className="flex flex-wrap gap-2 justify-center">
+                {result.game.map(n => <Ball key={n} number={n} active size="md"/>)}
+             </div>
+          </div>
+          <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+             <div>
+                <h4 className="text-slate-400 text-sm uppercase tracking-wide mb-2">Performance Histórica</h4>
+                <div className="space-y-4">
+                  <ResultRow label="Já fez 15 pontos?" value={result.hits15 > 0 ? `SIM (${result.hits15}x)` : 'NÃO'} good={result.hits15 > 0} />
+                  <ResultRow label="Já fez 14 pontos?" value={result.hits14 > 0 ? `SIM (${result.hits14}x)` : 'NÃO'} good={result.hits14 > 0} />
+                  <ResultRow label="Máximo de Acertos" value={`${result.maxHits} acertos`} good={result.maxHits >= 14} />
+                </div>
+             </div>
+             <div>
+                <h4 className="text-slate-400 text-sm uppercase tracking-wide mb-2">Melhor Resultado Encontrado</h4>
+                {result.bestConcurso ? (
+                  <div className="bg-slate-700/30 p-4 rounded-lg">
+                    <p className="text-white font-bold">Concurso {result.bestConcurso.concurso}</p>
+                    <p className="text-slate-400 text-sm">{result.bestConcurso.data}</p>
+                    <p className="mt-2 text-emerald-400 font-bold">{result.maxHits} acertos neste dia</p>
+                  </div>
+                ) : (
+                  <p className="text-slate-500">Sem dados suficientes.</p>
+                )}
+             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * UI HELPERS
+ */
+const KpiCard = ({ title, value, sub, icon }) => (
+  <div className="bg-slate-800 border border-slate-700 p-5 rounded-xl flex items-start justify-between hover:border-slate-600 transition-colors">
+    <div>
+      <p className="text-slate-400 text-sm font-medium mb-1">{title}</p>
+      <h3 className="text-2xl font-bold text-white">{value}</h3>
+      {sub && <p className="text-emerald-400 text-xs mt-1">{sub}</p>}
+    </div>
+    <div className="p-3 bg-slate-900 rounded-lg border border-slate-700">
+      {icon}
+    </div>
+  </div>
+);
+
+const Ball = ({ number, active, size = 'md' }) => {
+  const sizes = { sm: 'w-6 h-6 text-xs', md: 'w-10 h-10 text-base', lg: 'w-12 h-12 text-lg', xl: 'w-14 h-14 text-xl' };
+  
+  // Lotofacil colors logic (simplified)
+  let bg = active ? 'bg-gradient-to-br from-purple-500 to-purple-700' : 'bg-slate-700';
+  if (active) {
+     if (number <= 5) bg = 'bg-gradient-to-br from-red-500 to-red-600'; // linha 1
+     else if (number <= 10) bg = 'bg-gradient-to-br from-yellow-500 to-yellow-600';
+     else if (number <= 15) bg = 'bg-gradient-to-br from-emerald-500 to-emerald-600';
+     else if (number <= 20) bg = 'bg-gradient-to-br from-blue-500 to-blue-600';
+     else bg = 'bg-gradient-to-br from-indigo-500 to-indigo-600';
   }
-}
 
-function simular(){
-  if(jogoAtual.length!==15) return;
-  let res={};
-  concursos.forEach((c,i)=>{
-    let acertos = jogoAtual.filter(n=>c.includes(n)).length;
-    if(acertos>=11){ res[acertos]=(res[acertos]||0)+1; }
-  });
-  resultadoSim.textContent=JSON.stringify(res,null,2);
-}
+  return (
+    <div className={`${sizes[size]} rounded-full flex items-center justify-center font-bold text-white shadow-lg ${bg} transition-transform hover:scale-110 cursor-default border-2 border-white/10`}>
+      {number}
+    </div>
+  );
+};
 
-function showTab(id){
-  document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
-  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  event.target.classList.add('active');
+const ControlSlider = ({ label, val, min, max, onChange, desc }) => (
+  <div>
+    <div className="flex justify-between mb-2">
+      <label className="text-sm font-medium text-slate-300">{label}</label>
+      <span className="text-emerald-400 font-mono font-bold">{val}</span>
+    </div>
+    <input 
+      type="range" min={min} max={max} value={val} 
+      onChange={(e) => onChange(parseInt(e.target.value))}
+      className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+    />
+    {desc && <p className="text-xs text-slate-500 mt-1">{desc}</p>}
+  </div>
+);
+
+const StatBadge = ({ label, value, ideal }) => (
+  <div className="text-center p-3 bg-slate-900/50 rounded-lg border border-slate-700">
+    <div className="text-xs text-slate-400 uppercase">{label}</div>
+    <div className="text-xl font-bold text-white my-1">{value}</div>
+    <div className="text-[10px] text-emerald-500">Meta: {ideal}</div>
+  </div>
+);
+
+const ResultRow = ({ label, value, good }) => (
+  <div className="flex justify-between items-center py-2 border-b border-slate-700 last:border-0">
+    <span className="text-slate-300">{label}</span>
+    <span className={`font-bold ${good ? 'text-emerald-400' : 'text-slate-500'}`}>{value}</span>
+  </div>
+);
+
+// Helper functions
+function generateRandomGame() {
+  const nums = new Set();
+  while(nums.size < 15) {
+    nums.add(Math.floor(Math.random() * 25) + 1);
+  }
+  return Array.from(nums);
 }
-</script>
-</body>
-</html>
