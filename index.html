@@ -8,10 +8,15 @@
     <!-- 1. Estilos (Tailwind CSS) -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- 2. Bibliotecas React e Recharts via CDN -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
+    <!-- 2. Bibliotecas React e Recharts via CDN (Versões Fixas e Estáveis) -->
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    
+    <!-- Dependência Prop-types (necessária para evitar erros em alguns builds do Recharts) -->
+    <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+    
+    <!-- Recharts (Versão Fixa para evitar erro de ForwardRef) -->
+    <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.min.js"></script>
     
     <!-- 3. Babel para rodar JSX no navegador -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -553,7 +558,7 @@
             );
         };
 
-        // --- 5. COMPONENTE PRINCIPAL (APP) ---
+        // --- 5. COMPONENTES PRINCIPAL (APP) ---
         const App = () => {
             const [activeTab, setActiveTab] = useState('dashboard');
             const [data, setData] = useState([]);
