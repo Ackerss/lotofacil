@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Lotofácil • Dashboard Estatístico</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin:0; background:#0f172a; color:#e5e7eb }
+    header { background:#020617; padding:16px; font-size:20px; font-weight:bold }
+    nav { display:flex; gap:12px; background:#020617; padding:10px; flex-wrap:wrap }
+    nav button { background:#1e293b; border:none; color:#fff; padding:8px 12px; cursor:pointer; border-radius:6px }
+    nav button.active { background:#22c55e; color:#020617 }
+    section { display:none; padding:16px }
+    section.active { display:block }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap:16px }
+    .card { background:#020617; padding:12px; border-radius:10px }
+    input, select { padding:6px; margin:4px }
+    table { width:100%; border-collapse:collapse }
+    th, td { border-bottom:1px solid #334155; padding:6px; text-align:center }
+  </style>
+</head>
+<body>
+<header>📊 Lotofácil • Sistema Estatístico Pessoal</header>
+<nav>
+  <button class="active" onclick="showTab('freq')">Frequência</button>
+  <button onclick="showTab('pares')">Pares x Ímpares</button>
+  <button onclick="showTab('somas')">Somatórias</button>
+  <button onclick="showTab('repeticao')">Repetições</button>
+  <button onclick="showTab('gerador')">Gerador de Jogos</button>
+  <button onclick="showTab('simulador')">Simulador</button>
+</nav>
+
+<section id="freq" class="active">
+  <div class="card"><canvas id="freqChart"></canvas></div>
+</section>
+
+<section id="pares">
+  <div class="card"><canvas id="parChart"></canvas></div>
+</section>
+
+<section id="somas">
+  <div class="card"><canvas id="somaChart"></canvas></div>
+</section>
+
+<section id="repeticao">
+  <div class="card"><canvas id="repChart"></canvas></div>
+</section>
+
+<section id="gerador">
+  <div class="card">
+    <h3>🎯 Gerador de Jogos com Regras</h3>
+    Pares: <input id="paresInput" type="number" value="8">
+    Ímpares: <input id="imparesInput" type="number" value="7"><br>
+    Soma mínima: <input id="somaMin" value="180">
+    Soma máxima: <input id="somaMax" value="220"><br>
+    Repetidos último concurso: <input id="repUlt" value="8"><br>
+    <button onclick="gerarJogo()">Gerar Jogo</button>
+    <pre id="jogoGerado"></pre>
+  </div>
+</section>
+
+<section id="simulador">
+  <div class="card">
+    <h3>🧪 Simulador Histórico</h3>
+    <button onclick="simular()">Simular jogo gerado</button>
+    <pre id="resultadoSim"></pre>
+  </div>
+</section>
+
+<script>
+const SHEET_CSV = 'https://docs.google.com/spreadsheets/d/196v-smtNT6NkSDTj1KPbDJ_A9dGTJe9Pm-gqJX19Mug/export?format=csv';
+let concursos = [];
+let ultimo = [];
+let jogoAtual = [];
+
+fetch(SHEET_CSV)
+  .then(r => r.text())
+  .then(csv => {
+    const linhas = csv.split('\n').slice(1);
+    linhas.forEach(l => {
+      const c = l.split(',').slice(1,16).map(n=>parseInt(n));
+      if(c.length===15) concursos.push(c);
+    });
+    ultimo = concursos[concursos.length-1];
+    calcularEstatisticas();
+  });
+
+function calcularEstatisticas(){
+  let freq = Array(26).fill(0);
+  let pares=0, impares=0;
+  let somas=[];
+  concursos.forEach(c=>{
+    let soma=0;
+    c.forEach(n=>{ freq[n]++; soma+=n; n%2===0?pares++:impares++; });
+    somas.push(soma);
+  });
+  new Chart(freqChart,{type:'bar',data:{labels:[...Array(25).keys()].map(i=>i+1),datasets:[{label:'Frequência',data:freq.slice(1)}]}});
+  new Chart(parChart,{type:'pie',data:{labels:['Pares','Ímpares'],datasets:[{data:[pares,impares]}]}});
+  new Chart(somaChart,{type:'line',data:{labels:somas.map((_,i)=>i+1),datasets:[{label:'Soma',data:somas}]}});
+}
+
+function gerarJogo(){
+  const pares = +paresInput.value;
+  const impares = +imparesInput.value;
+  const min = +somaMin.value;
+  const max = +somaMax.value;
+  const rep = +repUlt.value;
+  let nums=[...Array(25).keys()].map(i=>i+1);
+  while(true){
+    let jogo=[];
+    let p=0,i=0;
+    while(jogo.length<15){
+      let n = nums[Math.floor(Math.random()*25)];
+      if(jogo.includes(n)) continue;
+      if(n%2===0 && p>=pares) continue;
+      if(n%2===1 && i>=impares) continue;
+      jogo.push(n);
+      n%2===0?p++:i++;
+    }
+    let soma=jogo.reduce((a,b)=>a+b,0);
+    let repetidos=jogo.filter(n=>ultimo.includes(n)).length;
+    if(soma>=min && soma<=max && repetidos>=rep){
+      jogoAtual=jogo.sort((a,b)=>a-b);
+      jogoGerado.textContent=jogoAtual.join(' - ');
+      return;
+    }
+  }
+}
+
+function simular(){
+  if(jogoAtual.length!==15) return;
+  let res={};
+  concursos.forEach((c,i)=>{
+    let acertos = jogoAtual.filter(n=>c.includes(n)).length;
+    if(acertos>=11){ res[acertos]=(res[acertos]||0)+1; }
+  });
+  resultadoSim.textContent=JSON.stringify(res,null,2);
+}
+
+function showTab(id){
+  document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
