@@ -62,21 +62,27 @@
                     const response = await fetch(API_URL);
                     const data = await response.json();
                     
+                    console.log('Dados recebidos:', data[0]);
+                    
                     const concursosProcessados = data.map(item => ({
-                        concurso: item.Concurso,
-                        data: item.Data,
+                        concurso: item.Concurso || item.concurso,
+                        data: item['Data Sorteio'] || item.Data || item.data,
                         bolas: [
-                            item.B1, item.B2, item.B3, item.B4, item.B5,
-                            item.B6, item.B7, item.B8, item.B9, item.B10,
-                            item.B11, item.B12, item.B13, item.B14, item.B15
-                        ].filter(b => b !== undefined && b !== null)
-                    }));
+                            item.Bola1, item.Bola2, item.Bola3, item.Bola4, item.Bola5,
+                            item.Bola6, item.Bola7, item.Bola8, item.Bola9, item.Bola10,
+                            item.Bola11, item.Bola12, item.Bola13, item.Bola14, item.Bola15
+                        ].filter(b => b !== undefined && b !== null && b !== '')
+                    })).filter(c => c.concurso && c.bolas.length === 15);
+                    
+                    console.log('Concursos processados:', concursosProcessados.length);
+                    console.log('Primeiro concurso:', concursosProcessados[0]);
                     
                     setConcursos(concursosProcessados);
                     calcularFrequencias(concursosProcessados);
                     setLoading(false);
                 } catch (error) {
                     console.error('Erro ao carregar dados:', error);
+                    alert('Erro ao carregar dados: ' + error.message);
                     setLoading(false);
                 }
             };
