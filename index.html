@@ -13,7 +13,8 @@ import {
     History, 
     Trash2, 
     Download,
-    RefreshCw
+    RefreshCw,
+    Bug
 } from 'lucide-react';
 
 // --- CONFIGURAÇÃO ---
@@ -23,7 +24,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbzKmqFJ-g1mmXuyCPfETPLb
 // --- COMPONENTES VISUAIS ---
 
 const Icon = ({ name, size = 20, className }) => {
-    const icons = { Dice5, LayoutDashboard, Cpu, Save, Database, AlertTriangle, BarChart2, Sliders, Wand2, BookmarkPlus, History, Trash2, Download, RefreshCw };
+    const icons = { Dice5, LayoutDashboard, Cpu, Save, Database, AlertTriangle, BarChart2, Sliders, Wand2, BookmarkPlus, History, Trash2, Download, RefreshCw, Bug };
     const LucideIcon = icons[name] || Dice5;
     return <LucideIcon size={size} className={className} />;
 };
@@ -49,10 +50,9 @@ const StatCard = ({ title, value, subtext, color = "blue" }) => {
 
 const Ball = ({ n, size = "md" }) => {
     const sizeClasses = size === 'sm' ? 'w-6 h-6 text-xs' : 'w-9 h-9 text-sm';
-    // Cores baseadas na tabela oficial da Caixa (aproximada) ou gradiente padrão chique
     return (
         <div className={`${sizeClasses} flex items-center justify-center rounded-full font-bold shadow-md bg-gradient-to-br from-emerald-600 to-teal-800 text-white border border-emerald-500/30`}>
-            {n.toString().padStart(2, '0')}
+            {n?.toString().padStart(2, '0') || '--'}
         </div>
     );
 };
@@ -64,11 +64,11 @@ export default function LotoFacilApp() {
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [lastUpdated, setLastUpdated] = useState(null);
+    const [debugInfo, setDebugInfo] = useState(null); // Para mostrar o erro real
 
     // Estado do Gerador
     const [genFilters, setGenFilters] = useState({
-        oddTarget: 8, // 8 ímpares é muito comum
+        oddTarget: 8, 
         sumMin: 180,
         sumMax: 220,
         repeatsTarget: 9,
@@ -92,62 +92,95 @@ export default function LotoFacilApp() {
     const fetchData = async () => {
         setLoading(true);
         setError(null);
+        setDebugInfo(null);
         try {
             console.log("Iniciando busca em:", API_URL);
-            const response = await fetch(API_URL);
             
-            // Verifica se o Google retornou um erro HTML (comum se o script não estiver público)
+            // Adiciona parâmetro de tempo para evitar cache
+            const response = await fetch(`${API_URL}?t=${Date.now()}`, {
+                method: 'GET',
+                redirect: 'follow'
+            });
+            
+            // Verifica o tipo de conteúdo ANTES de tentar ler JSON
             const contentType = response.headers.get("content-type");
-            if (contentType && contentType.indexOf("application/json") === -1) {
-                throw new Error("A planilha não retornou JSON. Verifique se o Script está publicado como 'Qualquer pessoa' (Anyone).");
+            const text = await response.text(); // Pega como texto primeiro para debug
+            
+            let json;
+            try {
+                json = JSON.parse(text);
+            } catch (e) {
+                // Se falhar o parse, provavelmente é HTML de erro do Google
+                setDebugInfo(text.substring(0, 500)); // Mostra o começo do erro na tela
+                throw new Error("A resposta da planilha não é um JSON válido. Provavelmente é uma página de erro HTML (verifique as permissões 'Anyone/Qualquer Pessoa' no Apps Script).");
             }
 
-            const json = await response.json();
-            console.log("Dados brutos recebidos:", json);
+            console.log("JSON recebido:", json);
 
             let rawData = [];
+            // Tenta encontrar o array de dados em várias estruturas comuns
             if (Array.isArray(json)) rawData = json;
-            else if (json.data) rawData = json.data;
-            else if (json.user) rawData = Object.values(json); // Algumas APIs retornam objeto
+            else if (json.data && Array.isArray(json.data)) rawData = json.data;
+            else if (json.result && Array.isArray(json.result)) rawData = json.result;
+            else if (typeof json === 'object') rawData = Object.values(json);
             
-            if (!rawData.length) throw new Error("A planilha retornou dados vazios.");
+            if (!rawData || rawData.length === 0) throw new Error("A planilha retornou JSON, mas os dados estão vazios.");
 
-            // --- PARSER INTELIGENTE ---
-            // Detecta formato e normaliza
+            // --- PARSER SUPER ROBUSTO ---
             const cleanData = rawData.map((item, index) => {
-                let concurso, dezenas = [];
+                let concurso = null;
+                let dezenas = [];
 
-                // CASO 1: O Script retorna Objeto com chaves nomeadas (Ideal)
-                if (item.Concurso || item.concurso) {
-                    concurso = Number(item.Concurso || item.concurso);
-                    // Tenta achar as bolas nas chaves
-                    for (let i = 1; i <= 25; i++) { // Varre procurando Bola1..Bola15 ou B1..B15
-                        const val = item[`Bola${i}`] || item[`bola${i}`] || item[`B${i}`] || item[`d${i}`];
-                        if (val) dezenas.push(Number(val));
+                // Se o item for null/undefined, pula
+                if (!item) return null;
+
+                // TENTATIVA 1: Objeto com nomes de colunas (Sua estrutura provável)
+                // Procura por chaves que pareçam Concurso
+                if (item['Concurso'] || item['concurso'] || item['CONCURSO']) {
+                    concurso = Number(item['Concurso'] || item['concurso'] || item['CONCURSO']);
+                } 
+                // Se não achou por nome, tenta a primeira coluna se for array
+                else if (Array.isArray(item) && !isNaN(item[0])) {
+                    concurso = Number(item[0]);
+                }
+
+                // Procura as Bolas (Bola1...Bola15)
+                // Sua planilha tem: Bola1, Bola2...
+                for (let i = 1; i <= 25; i++) {
+                    // Variações de nome: Bola1, bola1, Bola 1, B1, etc.
+                    const val = item[`Bola${i}`] || item[`bola${i}`] || item[`Bola ${i}`] || item[`B${i}`];
+                    if (val !== undefined && val !== null && val !== "") {
+                        dezenas.push(Number(val));
                     }
-                    // Se não achou chaves de bolas, tenta array 'dezenas' dentro do objeto
-                    if (dezenas.length === 0 && Array.isArray(item.dezenas)) dezenas = item.dezenas;
-                }
-                
-                // CASO 2: O Script retorna Array simples [Concurso, Data, B1, B2...]
-                // Baseado na sua descrição: A=Concurso, B=Data, C=Bola1
-                else if (Array.isArray(item)) {
-                    concurso = Number(item[0]); // Coluna A
-                    // Pega da Coluna C (índice 2) até Q (índice 16) = 15 bolas
-                    // Filtra apenas números válidos
-                    dezenas = item.slice(2, 17).map(Number).filter(n => !isNaN(n) && n > 0);
                 }
 
-                // Validação final da linha
+                // TENTATIVA 2: Se não achou bolas por nome, tenta pegar do Array direto (colunas C a Q)
+                if (dezenas.length < 15 && Array.isArray(item)) {
+                    // Assumindo A=Concurso, B=Data, C=Bola1 (índice 2)
+                    const sliceCandidato = item.slice(2, 17).map(Number).filter(n => !isNaN(n) && n > 0);
+                    if (sliceCandidato.length >= 15) dezenas = sliceCandidato;
+                }
+
+                // TENTATIVA 3 (Desespero): Varre todas as propriedades numéricas do objeto
+                if (dezenas.length < 15 && typeof item === 'object') {
+                    const todosNumeros = Object.values(item)
+                        .map(v => Number(v))
+                        .filter(n => !isNaN(n) && n >= 1 && n <= 25);
+                    // Remove duplicatas e pega os primeiros 15
+                    const unicos = [...new Set(todosNumeros)];
+                    if (unicos.length >= 15) dezenas = unicos.slice(0, 15);
+                }
+
+                // Validação Final
                 if (!concurso || dezenas.length < 15) return null;
 
                 return {
                     Concurso: concurso,
-                    Dezenas: dezenas.sort((a, b) => a - b)
+                    Dezenas: dezenas.sort((a, b) => a - b).slice(0, 15) // Garante apenas 15 e ordenados
                 };
             }).filter(Boolean); // Remove nulos
 
-            if (cleanData.length === 0) throw new Error("Não foi possível ler as colunas. Verifique se a planilha tem cabeçalho na linha 1 e dados na linha 2.");
+            if (cleanData.length === 0) throw new Error("Dados encontrados, mas o sistema não conseguiu identificar as colunas 'Concurso' e 'Bola1'...'Bola15'. Verifique se o cabeçalho está correto.");
 
             // Ordena decrescente (mais novo primeiro)
             cleanData.sort((a, b) => b.Concurso - a.Concurso);
@@ -160,14 +193,14 @@ export default function LotoFacilApp() {
             console.error(err);
             setError(err.message);
             setLoading(false);
-            // Fallback para dados mockados APENAS se falhar, para o usuário não ver tela branca
-            if (history.length === 0) generateMockData();
+            // NÃO carrega mock data automaticamente para forçar o usuário a ver o erro e corrigir
+            // Se o usuário quiser testar, ele vai ver o botão de "Carregar Demo"
         }
     };
 
-    const generateMockData = () => {
+    const loadDemoData = () => {
         const mock = [];
-        for (let i = 3000; i > 2950; i--) {
+        for (let i = 3400; i > 3300; i--) {
             const dezenas = [];
             while(dezenas.length < 15) {
                 const n = Math.floor(Math.random() * 25) + 1;
@@ -176,6 +209,8 @@ export default function LotoFacilApp() {
             mock.push({ Concurso: i, Dezenas: dezenas.sort((a,b)=>a-b) });
         }
         setHistory(mock);
+        setError(null);
+        setDebugInfo(null);
     };
 
     useEffect(() => {
@@ -191,7 +226,6 @@ export default function LotoFacilApp() {
         let sumTotal = 0;
         let oddTotal = 0;
 
-        // Analisa últimos 100 jogos para tendência recente, ou todos para geral
         const analysisRange = history; 
 
         analysisRange.forEach(game => {
@@ -221,49 +255,48 @@ export default function LotoFacilApp() {
 
     // --- GERADOR DE JOGOS ---
     const handleGenerate = () => {
-        if (!stats) return;
-        const lastDrawSet = new Set(stats.lastDraw.Dezenas);
+        const baseSet = stats ? new Set(stats.lastDraw.Dezenas) : new Set();
         let newGames = [];
         let attempts = 0;
 
         while (newGames.length < 5 && attempts < 2000) {
             attempts++;
-            // 1. Array base 1..25
             let pool = Array.from({length: 25}, (_, i) => i + 1);
-            
-            // Embaralha (Fisher-Yates simplificado)
             pool.sort(() => Math.random() - 0.5);
-            
-            // Pega 15
             const game = pool.slice(0, 15).sort((a,b) => a-b);
             
-            // Filtros
             const sum = game.reduce((a,b) => a+b, 0);
             if (sum < genFilters.sumMin || sum > genFilters.sumMax) continue;
 
             const odds = game.filter(n => n % 2 !== 0).length;
-            if (Math.abs(odds - genFilters.oddTarget) > 1) continue; // Aceita margem de erro de 1
+            if (Math.abs(odds - genFilters.oddTarget) > 1) continue; 
 
-            const repeats = game.filter(n => lastDrawSet.has(n)).length;
-            if (Math.abs(repeats - genFilters.repeatsTarget) > 1) continue;
+            if (baseSet.size > 0) {
+                const repeats = game.filter(n => baseSet.has(n)).length;
+                if (Math.abs(repeats - genFilters.repeatsTarget) > 1) continue;
+            }
 
             newGames.push({
                 id: Date.now() + attempts,
                 numbers: game,
-                meta: { sum, odds, repeats }
+                meta: { sum, odds, repeats: game.filter(n => baseSet.has(n)).length }
             });
         }
         
         if (newGames.length === 0) {
-            alert("Filtros muito rigorosos! Tente aumentar o intervalo da Soma ou relaxar os Ímpares.");
-        } else {
-            setGeneratedGames(prev => [...newGames, ...prev].slice(0, 20));
+            alert("Filtros muito rigorosos! Tentando gerar jogos aleatórios simples.");
+             // Fallback simples
+             for(let k=0; k<3; k++) {
+                let p = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
+                const g = p.slice(0, 15).sort((a,b) => a-b);
+                newGames.push({ id: Date.now()+k, numbers: g, meta: {sum:0, odds:0, repeats:0}});
+             }
         }
+        setGeneratedGames(prev => [...newGames, ...prev].slice(0, 20));
     };
 
     const checkHits = (gameNumbers) => {
         if (!history.length) return 0;
-        // Verifica contra o último resultado oficial
         const lastResult = history[0].Dezenas;
         return gameNumbers.filter(n => lastResult.includes(n)).length;
     };
@@ -296,6 +329,7 @@ export default function LotoFacilApp() {
                             onClick={fetchData} 
                             disabled={loading}
                             className="bg-slate-700 hover:bg-slate-600 p-2 rounded-full transition-all active:scale-95 disabled:opacity-50"
+                            title="Recarregar Dados"
                         >
                             <Icon name="RefreshCw" className={loading ? "animate-spin" : ""} />
                         </button>
@@ -328,26 +362,52 @@ export default function LotoFacilApp() {
 
             <main className="max-w-6xl mx-auto px-4 py-8">
                 
-                {/* STATUS BAR */}
+                {/* TELA DE ERRO DETALHADA */}
                 {error && (
-                    <div className="mb-6 bg-red-900/30 border border-red-500/50 p-4 rounded-xl flex items-center gap-3 text-red-200 animate-in fade-in slide-in-from-top-4">
-                        <Icon name="AlertTriangle" />
-                        <div>
-                            <p className="font-bold">Erro de Conexão</p>
-                            <p className="text-sm opacity-80">{error}</p>
-                            <p className="text-xs mt-1 text-red-400">Exibindo dados de exemplo para demonstração.</p>
+                    <div className="mb-8 space-y-4">
+                        <div className="bg-red-900/20 border border-red-500/50 p-6 rounded-xl flex flex-col gap-4 text-red-200 animate-in fade-in slide-in-from-top-4">
+                            <div className="flex items-center gap-3">
+                                <Icon name="AlertTriangle" size={24} className="text-red-500" />
+                                <div>
+                                    <h3 className="font-bold text-lg text-white">Falha na Conexão com a Planilha</h3>
+                                    <p className="opacity-90">{error}</p>
+                                </div>
+                            </div>
+
+                            {debugInfo && (
+                                <div className="mt-2 bg-black/50 p-4 rounded text-xs font-mono text-gray-300 overflow-x-auto border border-red-900/50">
+                                    <p className="mb-2 font-bold text-red-400 uppercase">Conteúdo Bruto Recebido (Primeiros 500 caracteres):</p>
+                                    {debugInfo}
+                                </div>
+                            )}
+
+                            <div className="flex gap-4 mt-2">
+                                <button 
+                                    onClick={loadDemoData}
+                                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-bold transition-colors"
+                                >
+                                    Carregar Modo de Demonstração
+                                </button>
+                                <button 
+                                    onClick={fetchData}
+                                    className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-bold transition-colors"
+                                >
+                                    Tentar Conectar Novamente
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
 
-                {loading && !history.length ? (
+                {loading && !history.length && !error ? (
                     <div className="flex flex-col items-center justify-center h-64 gap-4">
                         <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                        <p className="text-slate-400 animate-pulse">Sincronizando com Google Sheets...</p>
+                        <p className="text-slate-400 animate-pulse">Analisando dados da Lotofácil...</p>
                     </div>
                 ) : (
                     <>
                         {/* NAV DESKTOP */}
+                        {!error && (
                         <div className="hidden md:flex mb-8 bg-slate-800 p-1 rounded-xl w-fit">
                              {[
                                 { id: 'dashboard', label: 'Visão Geral', icon: 'LayoutDashboard' },
@@ -369,6 +429,7 @@ export default function LotoFacilApp() {
                                 </button>
                             ))}
                         </div>
+                        )}
 
                         {/* CONTEÚDO */}
                         {stats && activeTab === 'dashboard' && (
@@ -410,7 +471,7 @@ export default function LotoFacilApp() {
                                         <div className="h-48 flex items-end gap-1">
                                             {stats.freqs.map((val, idx) => {
                                                 const max = Math.max(...stats.freqs);
-                                                const h = (val / max) * 100;
+                                                const h = max > 0 ? (val / max) * 100 : 0;
                                                 const isHot = stats.hot.some(h => h.n === idx+1);
                                                 return (
                                                     <div key={idx} className="flex-1 flex flex-col items-center group relative h-full justify-end">
@@ -502,11 +563,13 @@ export default function LotoFacilApp() {
                                         <div className="pt-4 border-t border-slate-700">
                                             <button 
                                                 onClick={handleGenerate}
-                                                className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/50 flex items-center justify-center gap-2 transition-all active:scale-95"
+                                                disabled={!stats}
+                                                className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/50 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
                                                 <Icon name="Wand2" size={20} />
                                                 Gerar Combinações
                                             </button>
+                                            {!stats && <p className="text-xs text-red-400 mt-2 text-center">Carregue os dados primeiro para usar o gerador.</p>}
                                         </div>
                                     </div>
                                 </div>
@@ -613,7 +676,7 @@ export default function LotoFacilApp() {
 
                                                 <div className="flex flex-wrap gap-1.5 mb-2">
                                                     {game.numbers.map(n => (
-                                                        <span key={n} className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${stats.lastDraw.Dezenas.includes(n) ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30 ring-1 ring-emerald-400' : 'bg-slate-700 text-slate-300'}`}>
+                                                        <span key={n} className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${stats && stats.lastDraw.Dezenas.includes(n) ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30 ring-1 ring-emerald-400' : 'bg-slate-700 text-slate-300'}`}>
                                                             {n}
                                                         </span>
                                                     ))}
