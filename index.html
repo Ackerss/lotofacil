@@ -125,7 +125,7 @@
             useEffect(() => { localStorage.setItem('lotofacil_history_v2', JSON.stringify(history)); }, [history]);
             useEffect(() => { localStorage.setItem('lotofacil_saved_v2', JSON.stringify(savedGames)); }, [savedGames]);
 
-            // --- LEITURA DA PLANILHA EXCEL/CSV ---
+            // --- LEITURA DA PLANILHA EXCEL/CSV ROBUSTA ---
             const handleFileUpload = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -138,55 +138,75 @@
                     try {
                         const data = new Uint8Array(evt.target.result);
                         const workbook = XLSX.read(data, { type: 'array' });
-                        const firstSheetName = workbook.SheetNames[0];
-                        const worksheet = workbook.Sheets[firstSheetName];
                         
-                        // Extrai como matriz (array de arrays) para evitar problemas de nomes de colunas
-                        const rawJson = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                        const cleanDataMap = new Map();
+                        let fakeConcursoCounter = 999999; 
 
-                        const cleanData = [];
-                        rawJson.forEach(row => {
-                            if (!Array.isArray(row) || row.length < 5) return;
+                        // Varre todas as abas da planilha (útil se o usuário salvar em abas diferentes)
+                        workbook.SheetNames.forEach(sheetName => {
+                            const worksheet = workbook.Sheets[sheetName];
+                            const rawJson = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-                            let concurso = Number(row[0]);
-                            if (isNaN(concurso) || concurso <= 0) return; // Ignora cabeçalhos
+                            rawJson.forEach(row => {
+                                if (!Array.isArray(row)) return;
 
-                            let dezenas = [];
-                            
-                            // Tentativa 1: Formato padrão da Caixa (Colunas C a Q -> Índices 2 a 16)
-                            for (let i = 2; i <= 16; i++) {
-                                const val = Number(row[i]);
-                                if (!isNaN(val) && val >= 1 && val <= 25) {
-                                    dezenas.push(val);
-                                }
-                            }
+                                // 1. Transforma tudo da linha em número limpo e ignora textos/vazios
+                                const numerosDaLinha = row
+                                    .map(val => {
+                                        if (val === undefined || val === null || val === '') return null;
+                                        if (typeof val === 'string' && val.trim() === '') return null;
+                                        const num = Number(val);
+                                        return isNaN(num) ? null : num;
+                                    })
+                                    .filter(n => n !== null);
 
-                            // Tentativa 2: Varredura de segurança caso o arquivo seja diferente
-                            if (dezenas.length < 15) {
-                                dezenas = [];
-                                for (let i = 1; i < row.length; i++) {
-                                    const val = Number(row[i]);
-                                    if (!isNaN(val) && val >= 1 && val <= 25) {
-                                        dezenas.push(val);
+                                // Se não tem pelo menos as 15 bolas da loto, descarta a linha
+                                if (numerosDaLinha.length < 15) return; 
+
+                                let concurso;
+                                let dezenasBrutas;
+
+                                if (numerosDaLinha.length === 15) {
+                                    // Situação 1: A planilha só tem as 15 bolas (sem concurso)
+                                    const candidatas = [...new Set(numerosDaLinha.filter(n => n >= 1 && n <= 25))];
+                                    if (candidatas.length === 15) {
+                                        concurso = fakeConcursoCounter--;
+                                        dezenasBrutas = candidatas;
+                                    }
+                                } else {
+                                    // Situação 2: Tem Concurso + Bolas (Padrão Caixa)
+                                    // Assume que o primeiro número válido que apareceu é o concurso
+                                    concurso = Math.floor(numerosDaLinha[0]);
+                                    
+                                    // Procura as bolas do segundo número em diante
+                                    const numerosRestantes = numerosDaLinha.slice(1);
+                                    
+                                    // Extrai apenas o que for do 1 ao 25 e remove repetições
+                                    const candidatas = [...new Set(numerosRestantes.filter(n => n >= 1 && n <= 25))];
+                                    
+                                    if (candidatas.length >= 15) {
+                                        // Pega os 15 primeiros exatos (ignorando eventuais números de prêmio)
+                                        dezenasBrutas = candidatas.slice(0, 15);
                                     }
                                 }
-                            }
 
-                            dezenas = [...new Set(dezenas)]; // Remove duplicadas se houver
-
-                            if (dezenas.length >= 15) {
-                                cleanData.push({
-                                    Concurso: concurso,
-                                    Dezenas: dezenas.slice(0, 15).sort((a, b) => a - b)
-                                });
-                            }
+                                // Se achou um concurso válido e 15 bolas, salva no sistema
+                                if (dezenasBrutas && dezenasBrutas.length === 15 && concurso > 0) {
+                                    cleanDataMap.set(concurso, {
+                                        Concurso: concurso,
+                                        Dezenas: dezenasBrutas.sort((a, b) => a - b)
+                                    });
+                                }
+                            });
                         });
 
+                        const cleanData = Array.from(cleanDataMap.values());
+
                         if (cleanData.length === 0) {
-                            throw new Error("Não encontrei sorteios válidos. Certifique-se de usar a planilha oficial da Caixa (ou um arquivo onde a 1ª coluna é o Concurso e as outras são as dezenas).");
+                            throw new Error("Não consegui encontrar as 15 dezenas em nenhuma linha. O sistema procurou por números de 1 a 25 lado a lado. Verifique se o formato não está desconfigurado.");
                         }
 
-                        // Ordena do mais recente pro mais antigo
+                        // Ordena do mais recente (maior concurso) pro mais antigo
                         cleanData.sort((a, b) => b.Concurso - a.Concurso);
                         setHistory(cleanData);
                         setActiveTab('dashboard');
@@ -203,7 +223,7 @@
                 };
                 
                 reader.readAsArrayBuffer(file);
-                e.target.value = null; // Reseta o input para permitir subir o mesmo arquivo de novo se quiser
+                e.target.value = null; // Reseta o input para permitir subir o mesmo arquivo de novo
             };
 
             const loadDemoData = () => {
