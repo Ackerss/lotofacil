@@ -22,7 +22,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
     <style>
-        /* Estilização da barra de rolagem */
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
@@ -59,6 +58,12 @@
         const Info = createIcon('fa-solid fa-circle-info');
         const Upload = createIcon('fa-solid fa-upload');
         const FileExcel = createIcon('fa-solid fa-file-excel');
+        const HandPointer = createIcon('fa-solid fa-hand-pointer');
+
+        // --- CONSTANTES MATEMÁTICAS DA LOTOFÁCIL ---
+        const PRIMOS = [2, 3, 5, 7, 11, 13, 17, 19, 23];
+        const FIBONACCI = [1, 2, 3, 5, 8, 13, 21];
+        const MOLDURA = [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25];
 
         // --- COMPONENTES VISUAIS ---
         const StatCard = ({ title, value, subtext, color = "blue" }) => {
@@ -83,7 +88,7 @@
         const Ball = ({ n, size = "md", highlight = false }) => {
             const sizeClasses = size === 'sm' ? 'w-6 h-6 text-xs' : size === 'lg' ? 'w-10 h-10 text-base' : 'w-8 h-8 text-sm';
             const bgClasses = highlight 
-                ? 'bg-gradient-to-br from-emerald-500 to-teal-700 border-emerald-400 shadow-emerald-500/30' 
+                ? 'bg-gradient-to-br from-emerald-500 to-teal-700 border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.4)]' 
                 : 'bg-slate-700 border-slate-600 text-slate-200';
 
             return (
@@ -100,130 +105,88 @@
             const [error, setError] = useState(null);
             const [copySuccess, setCopySuccess] = useState(false);
 
-            // Histórico de Jogos (Persiste no navegador para não precisar importar toda vez)
+            // Dados
             const [history, setHistory] = useState(() => {
-                try {
-                    const local = localStorage.getItem('lotofacil_history_v2');
-                    return local ? JSON.parse(local) : [];
-                } catch (e) { return []; }
+                try { return JSON.parse(localStorage.getItem('lotofacil_history_v3')) || []; } catch (e) { return []; }
             });
-
-            // Persistência dos Jogos Salvos
             const [savedGames, setSavedGames] = useState(() => {
-                try {
-                    const local = localStorage.getItem('lotofacil_saved_v2');
-                    return local ? JSON.parse(local) : [];
-                } catch (e) { return []; }
+                try { return JSON.parse(localStorage.getItem('lotofacil_saved_v3')) || []; } catch (e) { return []; }
             });
 
-            // Estado do Gerador
-            const [genFilters, setGenFilters] = useState({ oddTarget: 8, sumMin: 190, sumMax: 210, repeatsTarget: 9 });
+            // Cartela Interativa
+            const [manualSelection, setManualSelection] = useState([]);
+
+            // IA Gerador
+            const [genFilters, setGenFilters] = useState({ oddTarget: 8, sumMin: 190, sumMax: 210, repeatsTarget: 9, molduraTarget: 10, primosTarget: 5 });
             const [generatedGames, setGeneratedGames] = useState([]);
             const [isGenerating, setIsGenerating] = useState(false);
 
-            // Salvando no LocalStorage
-            useEffect(() => { localStorage.setItem('lotofacil_history_v2', JSON.stringify(history)); }, [history]);
-            useEffect(() => { localStorage.setItem('lotofacil_saved_v2', JSON.stringify(savedGames)); }, [savedGames]);
+            useEffect(() => { localStorage.setItem('lotofacil_history_v3', JSON.stringify(history)); }, [history]);
+            useEffect(() => { localStorage.setItem('lotofacil_saved_v3', JSON.stringify(savedGames)); }, [savedGames]);
 
-            // --- LEITURA DA PLANILHA EXCEL/CSV ROBUSTA ---
+            // --- LEITURA DA PLANILHA OFICIAL ---
             const handleFileUpload = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
 
-                setLoading(true);
-                setError(null);
-
+                setLoading(true); setError(null);
                 const reader = new FileReader();
                 reader.onload = (evt) => {
                     try {
                         const data = new Uint8Array(evt.target.result);
                         const workbook = XLSX.read(data, { type: 'array' });
-                        
                         const cleanDataMap = new Map();
-                        let fakeConcursoCounter = 999999; 
 
-                        // Varre todas as abas da planilha (útil se o usuário salvar em abas diferentes)
                         workbook.SheetNames.forEach(sheetName => {
                             const worksheet = workbook.Sheets[sheetName];
                             const rawJson = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-                            rawJson.forEach(row => {
-                                if (!Array.isArray(row)) return;
+                            rawJson.forEach((row) => {
+                                if (!Array.isArray(row) || row.length < 15) return;
 
-                                // 1. Transforma tudo da linha em número limpo e ignora textos/vazios
-                                const numerosDaLinha = row
-                                    .map(val => {
-                                        if (val === undefined || val === null || val === '') return null;
-                                        if (typeof val === 'string' && val.trim() === '') return null;
-                                        const num = Number(val);
-                                        return isNaN(num) ? null : num;
-                                    })
-                                    .filter(n => n !== null);
+                                const concurso = Number(row[0]);
+                                if (isNaN(concurso) || concurso <= 0) return;
 
-                                // Se não tem pelo menos as 15 bolas da loto, descarta a linha
-                                if (numerosDaLinha.length < 15) return; 
-
-                                let concurso;
-                                let dezenasBrutas;
-
-                                if (numerosDaLinha.length === 15) {
-                                    // Situação 1: A planilha só tem as 15 bolas (sem concurso)
-                                    const candidatas = [...new Set(numerosDaLinha.filter(n => n >= 1 && n <= 25))];
-                                    if (candidatas.length === 15) {
-                                        concurso = fakeConcursoCounter--;
-                                        dezenasBrutas = candidatas;
-                                    }
-                                } else {
-                                    // Situação 2: Tem Concurso + Bolas (Padrão Caixa)
-                                    // Assume que o primeiro número válido que apareceu é o concurso
-                                    concurso = Math.floor(numerosDaLinha[0]);
-                                    
-                                    // Procura as bolas do segundo número em diante
-                                    const numerosRestantes = numerosDaLinha.slice(1);
-                                    
-                                    // Extrai apenas o que for do 1 ao 25 e remove repetições
-                                    const candidatas = [...new Set(numerosRestantes.filter(n => n >= 1 && n <= 25))];
-                                    
-                                    if (candidatas.length >= 15) {
-                                        // Pega os 15 primeiros exatos (ignorando eventuais números de prêmio)
-                                        dezenasBrutas = candidatas.slice(0, 15);
-                                    }
+                                let dezenas = [];
+                                // Padrão Caixa: bolas nas colunas C a Q (índices 2 a 16)
+                                for (let i = 2; i <= 16; i++) {
+                                    const val = Number(row[i]);
+                                    if (!isNaN(val) && val >= 1 && val <= 25) dezenas.push(val);
                                 }
 
-                                // Se achou um concurso válido e 15 bolas, salva no sistema
-                                if (dezenasBrutas && dezenasBrutas.length === 15 && concurso > 0) {
-                                    cleanDataMap.set(concurso, {
-                                        Concurso: concurso,
-                                        Dezenas: dezenasBrutas.sort((a, b) => a - b)
-                                    });
+                                let dezenasUnicas = [...new Set(dezenas)];
+                                if (dezenasUnicas.length === 15) {
+                                    cleanDataMap.set(concurso, { Concurso: concurso, Dezenas: dezenasUnicas.sort((a, b) => a - b) });
+                                    return;
+                                }
+
+                                // Fallback se a data for apagada
+                                dezenas = [];
+                                for (let i = 1; i <= 15; i++) {
+                                    const val = Number(row[i]);
+                                    if (!isNaN(val) && val >= 1 && val <= 25) dezenas.push(val);
+                                }
+                                dezenasUnicas = [...new Set(dezenas)];
+                                if (dezenasUnicas.length === 15) {
+                                    cleanDataMap.set(concurso, { Concurso: concurso, Dezenas: dezenasUnicas.sort((a, b) => a - b) });
                                 }
                             });
                         });
 
-                        const cleanData = Array.from(cleanDataMap.values());
-
-                        if (cleanData.length === 0) {
-                            throw new Error("Não consegui encontrar as 15 dezenas em nenhuma linha. O sistema procurou por números de 1 a 25 lado a lado. Verifique se o formato não está desconfigurado.");
-                        }
-
-                        // Ordena do mais recente (maior concurso) pro mais antigo
-                        cleanData.sort((a, b) => b.Concurso - a.Concurso);
+                        const cleanData = Array.from(cleanDataMap.values()).sort((a, b) => b.Concurso - a.Concurso);
+                        if (cleanData.length === 0) throw new Error("Planilha inválida. Envie o arquivo exato da Caixa.");
+                        
                         setHistory(cleanData);
                         setActiveTab('dashboard');
                     } catch (err) {
-                        console.error(err);
                         setError(err.message);
                     } finally {
                         setLoading(false);
                     }
                 };
-                reader.onerror = () => {
-                    setError("Erro ao ler o arquivo no seu computador.");
-                    setLoading(false);
-                };
-                
+                reader.onerror = () => { setError("Erro de leitura."); setLoading(false); };
                 reader.readAsArrayBuffer(file);
-                e.target.value = null; // Reseta o input para permitir subir o mesmo arquivo de novo
+                e.target.value = null;
             };
 
             const loadDemoData = () => {
@@ -232,17 +195,16 @@
                     let pool = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
                     mock.push({ Concurso: i, Dezenas: pool.slice(0, 15).sort((a,b)=>a-b) });
                 }
-                setHistory(mock);
-                setError(null);
+                setHistory(mock); setError(null);
             };
 
-            // --- ESTATÍSTICAS ---
+            // --- ESTATÍSTICAS (Inclui Primos, Moldura, Fibonacci) ---
             const stats = useMemo(() => {
                 if (!history.length) return null;
                 
                 const lastDraw = history[0];
                 const freqs = Array(25).fill(0);
-                let sumTotal = 0, oddTotal = 0;
+                let sumTotal = 0, oddTotal = 0, primeTotal = 0, molduraTotal = 0;
 
                 history.forEach(game => {
                     let gameSum = 0;
@@ -252,6 +214,8 @@
                     });
                     sumTotal += gameSum;
                     oddTotal += game.Dezenas.filter(n => n % 2 !== 0).length;
+                    primeTotal += game.Dezenas.filter(n => PRIMOS.includes(n)).length;
+                    molduraTotal += game.Dezenas.filter(n => MOLDURA.includes(n)).length;
                 });
 
                 const sortedFreqs = freqs.map((q, i) => ({ n: i+1, q })).sort((a,b) => b.q - a.q);
@@ -260,11 +224,35 @@
                     lastDraw,
                     avgSum: Math.round(sumTotal / history.length),
                     avgOdd: (oddTotal / history.length).toFixed(1),
+                    avgPrime: (primeTotal / history.length).toFixed(1),
+                    avgMoldura: (molduraTotal / history.length).toFixed(1),
                     hot: sortedFreqs.slice(0, 5),
                     cold: sortedFreqs.slice(-5).reverse(),
                     freqs
                 };
             }, [history]);
+
+            // --- INTERAÇÃO CARTELA MANUAL ---
+            const toggleManualSelection = (n) => {
+                if (manualSelection.includes(n)) {
+                    setManualSelection(manualSelection.filter(num => num !== n));
+                } else {
+                    if (manualSelection.length < 15) {
+                        setManualSelection([...manualSelection, n].sort((a,b) => a-b));
+                    }
+                }
+            };
+
+            const getManualStats = () => {
+                const sum = manualSelection.reduce((a, b) => a + b, 0);
+                const odds = manualSelection.filter(n => n % 2 !== 0).length;
+                const evens = manualSelection.length - odds;
+                const primes = manualSelection.filter(n => PRIMOS.includes(n)).length;
+                const moldura = manualSelection.filter(n => MOLDURA.includes(n)).length;
+                const fibo = manualSelection.filter(n => FIBONACCI.includes(n)).length;
+                const repeats = stats ? manualSelection.filter(n => stats.lastDraw.Dezenas.includes(n)).length : 0;
+                return { sum, odds, evens, primes, moldura, fibo, repeats };
+            };
 
             // --- GERADOR IA ---
             const handleGenerate = () => {
@@ -273,9 +261,8 @@
                     const baseSet = stats ? new Set(stats.lastDraw.Dezenas) : new Set();
                     let newGames = [];
                     let attempts = 0;
-                    const MAX_ATTEMPTS = 5000; 
 
-                    while (newGames.length < 5 && attempts < MAX_ATTEMPTS) {
+                    while (newGames.length < 5 && attempts < 10000) {
                         attempts++;
                         let pool = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
                         const game = pool.slice(0, 15).sort((a,b) => a-b);
@@ -286,28 +273,34 @@
                         const odds = game.filter(n => n % 2 !== 0).length;
                         if (Math.abs(odds - genFilters.oddTarget) > 1) continue; 
 
+                        const primes = game.filter(n => PRIMOS.includes(n)).length;
+                        if (Math.abs(primes - genFilters.primosTarget) > 1) continue;
+
+                        const moldura = game.filter(n => MOLDURA.includes(n)).length;
+                        if (Math.abs(moldura - genFilters.molduraTarget) > 1) continue;
+
                         const repeats = game.filter(n => baseSet.has(n)).length;
                         if (baseSet.size > 0 && Math.abs(repeats - genFilters.repeatsTarget) > 1) continue;
 
                         newGames.push({
                             id: Date.now() + attempts,
                             numbers: game,
-                            meta: { sum, odds, repeats }
+                            meta: { sum, odds, repeats, primes, moldura }
                         });
                     }
                     
                     if (newGames.length === 0) {
-                        alert("Filtros muito restritos! Ajuste a Soma, Ímpares ou Repetidas e tente novamente.");
+                        alert("Filtros muito restritos! A matemática diz que é muito raro gerar jogos com todas essas restrições cruzadas. Ajuste-os e tente novamente.");
                     } else {
                         setGeneratedGames(newGames);
                     }
                     setIsGenerating(false);
-                }, 50);
+                }, 100);
             };
 
-            const handleSaveGame = (game) => {
-                if(!savedGames.some(g => JSON.stringify(g.numbers) === JSON.stringify(game.numbers))) {
-                    setSavedGames(prev => [game, ...prev]);
+            const handleSaveGame = (gameNumbers) => {
+                if(!savedGames.some(g => JSON.stringify(g.numbers) === JSON.stringify(gameNumbers))) {
+                    setSavedGames(prev => [{id: Date.now() + Math.random(), numbers: gameNumbers}, ...prev]);
                 }
             };
 
@@ -323,9 +316,7 @@
                 const blob = new Blob([text], {type: 'text/plain'});
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = url; 
-                a.download = 'Natubrava_Lotofacil.txt';
-                a.click();
+                a.href = url; a.download = 'Natubrava_Lotofacil.txt'; a.click();
             };
 
             // --- RENDERIZAÇÃO ---
@@ -355,7 +346,7 @@
                                 
                                 {history.length > 0 && (
                                     <button 
-                                        onClick={() => { if(window.confirm('Tem certeza que deseja apagar o histórico atual?')) setHistory([]); }}
+                                        onClick={() => { if(window.confirm('Tem certeza que deseja apagar o histórico?')) setHistory([]); }}
                                         className="bg-slate-700 hover:bg-red-500 text-slate-300 hover:text-white p-2.5 rounded-lg transition-colors shadow-lg"
                                         title="Limpar Histórico"
                                     >
@@ -372,15 +363,15 @@
                         </div>
                     </header>
 
-                    {/* NAVEGAÇÃO MOBILE (Só mostra se tiver histórico) */}
+                    {/* NAVEGAÇÃO MOBILE */}
                     {history.length > 0 && (
                         <div className="md:hidden bg-slate-800/80 backdrop-blur border-b border-slate-700 overflow-x-auto sticky top-16 z-40">
                             <div className="flex p-2 gap-2 min-w-max">
                                 {[
                                     { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
+                                    { id: 'cartela', label: 'Montar Jogo', icon: HandPointer },
                                     { id: 'generator', label: 'Gerador IA', icon: Cpu },
                                     { id: 'saved', label: 'Salvos', icon: Save },
-                                    { id: 'data', label: 'Tabela', icon: Database },
                                 ].map(tab => (
                                     <button
                                         key={tab.id}
@@ -414,7 +405,6 @@
                             </div>
                         )}
 
-                        {/* ESTADO DE LOADING */}
                         {loading && (
                             <div className="flex flex-col items-center justify-center h-64 gap-4 animate-in fade-in">
                                 <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
@@ -422,18 +412,18 @@
                             </div>
                         )}
 
-                        {/* ESTADO VAZIO (SEM HISTÓRICO) */}
+                        {/* ESTADO VAZIO */}
                         {!loading && history.length === 0 && !error && (
                             <div className="flex flex-col items-center justify-center py-20 px-4 text-center bg-slate-800/40 rounded-3xl border-2 border-dashed border-slate-700 animate-in fade-in zoom-in-95">
                                 <FileExcel size={72} className="text-emerald-500 mb-6 opacity-80" />
                                 <h2 className="text-3xl font-extrabold text-white mb-3 tracking-tight">Comece sua Análise</h2>
                                 <p className="text-slate-400 max-w-lg mb-8 text-lg">
-                                    Baixe a planilha oficial de resultados no site da Caixa e importe aqui. O sistema armazena automaticamente os dados no seu navegador.
+                                    Baixe a planilha oficial de resultados no site da Caixa e importe aqui. O sistema armazena os dados no seu navegador.
                                 </p>
                                 
                                 <label className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-4 rounded-xl transition-all active:scale-95 cursor-pointer flex items-center gap-3 font-bold text-lg shadow-xl shadow-emerald-900/50">
                                     <Upload size={24} />
-                                    Importar Planilha Oficial (.xlsx ou .csv)
+                                    Importar Planilha da Caixa (.xlsx)
                                     <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} className="hidden" />
                                 </label>
                                 
@@ -443,14 +433,15 @@
                             </div>
                         )}
 
-                        {/* DASHBOARD PRINCIPAL (Só mostra com dados carregados) */}
+                        {/* DASHBOARD PRINCIPAL */}
                         {!loading && history.length > 0 && !error && (
                             <>
                                 {/* NAVEGAÇÃO DESKTOP */}
                                 <div className="hidden md:flex mb-8 bg-slate-800 p-1 rounded-xl w-fit border border-slate-700 shadow-md">
                                      {[
                                         { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard },
-                                        { id: 'generator', label: 'Gerador Inteligente', icon: Cpu },
+                                        { id: 'cartela', label: 'Montar Jogo', icon: HandPointer },
+                                        { id: 'generator', label: 'Gerador IA', icon: Cpu },
                                         { id: 'saved', label: `Jogos Salvos (${savedGames.length})`, icon: Save },
                                         { id: 'data', label: 'Base de Dados', icon: Database },
                                     ].map(tab => (
@@ -484,6 +475,7 @@
                                                     <div className="flex flex-wrap gap-2 justify-center xl:justify-start">
                                                         <span className="text-emerald-400 bg-emerald-900/30 border border-emerald-800/50 px-3 py-1 rounded text-sm font-medium">Soma: {stats.lastDraw.Dezenas.reduce((a,b)=>a+b,0)}</span>
                                                         <span className="text-blue-400 bg-blue-900/30 border border-blue-800/50 px-3 py-1 rounded text-sm font-medium">Ímpares: {stats.lastDraw.Dezenas.filter(n=>n%2!==0).length}</span>
+                                                        <span className="text-purple-400 bg-purple-900/30 border border-purple-800/50 px-3 py-1 rounded text-sm font-medium">Primos: {stats.lastDraw.Dezenas.filter(n=>PRIMOS.includes(n)).length}</span>
                                                     </div>
                                                 </div>
                                                 <div className="flex flex-wrap justify-center xl:justify-end gap-2 xl:gap-3 max-w-2xl">
@@ -494,8 +486,8 @@
 
                                         {/* Cards Stats */}
                                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                            <StatCard title="Média Soma" value={stats.avgSum} subtext="Ideal Histórico: 190 a 210" color="blue" />
-                                            <StatCard title="Média Ímpares" value={stats.avgOdd} subtext="Ideal Histórico: 7 a 9" color="purple" />
+                                            <StatCard title="Média Primos" value={stats.avgPrime} subtext="Ideal Histórico: 5 a 6" color="purple" />
+                                            <StatCard title="Média Moldura" value={stats.avgMoldura} subtext="Ideal Histórico: 9 a 10" color="amber" />
                                             <StatCard title="Dezena Mais Quente" value={`Nº ${stats.hot[0].n.toString().padStart(2,'0')}`} subtext={`Saiu ${stats.hot[0].q} vezes`} color="emerald" />
                                             <StatCard title="Dezena Mais Fria" value={`Nº ${stats.cold[0].n.toString().padStart(2,'0')}`} subtext={`Saiu só ${stats.cold[0].q} vezes`} color="red" />
                                         </div>
@@ -529,27 +521,27 @@
 
                                             <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 flex flex-col justify-between gap-6 shadow-lg">
                                                 <div>
-                                                    <h3 className="text-emerald-400 font-bold text-sm uppercase mb-3 flex items-center gap-2">🔥 Top 5 Quentes</h3>
+                                                    <h3 className="text-red-500 font-bold text-sm uppercase mb-3 flex items-center gap-2">🔥 Top 5 Quentes</h3>
                                                     <div className="flex flex-col gap-2">
                                                         {stats.hot.map(h => (
-                                                            <div key={h.n} className="bg-slate-900/50 px-3 py-2 rounded-lg text-sm flex justify-between items-center">
+                                                            <div key={h.n} className="bg-slate-900/50 px-3 py-2 rounded-lg text-sm flex justify-between items-center border border-red-500/20">
                                                                 <span className="font-bold text-white flex items-center gap-2">
-                                                                    <div className="w-2 h-2 rounded-full bg-emerald-500"></div> Nº {h.n.toString().padStart(2,'0')}
+                                                                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div> Nº {h.n.toString().padStart(2,'0')}
                                                                 </span>
-                                                                <span className="text-emerald-500 text-xs font-mono">{h.q}x</span>
+                                                                <span className="text-red-400 text-xs font-mono">{h.q}x</span>
                                                             </div>
                                                         ))}
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <h3 className="text-blue-400 font-bold text-sm uppercase mb-3 flex items-center gap-2">❄️ Top 5 Frias</h3>
+                                                    <h3 className="text-blue-500 font-bold text-sm uppercase mb-3 flex items-center gap-2">❄️ Top 5 Frias</h3>
                                                     <div className="flex flex-col gap-2">
                                                         {stats.cold.map(c => (
-                                                            <div key={c.n} className="bg-slate-900/50 px-3 py-2 rounded-lg text-sm flex justify-between items-center">
+                                                            <div key={c.n} className="bg-slate-900/50 px-3 py-2 rounded-lg text-sm flex justify-between items-center border border-blue-500/20">
                                                                 <span className="font-bold text-white flex items-center gap-2">
                                                                     <div className="w-2 h-2 rounded-full bg-blue-500"></div> Nº {c.n.toString().padStart(2,'0')}
                                                                 </span>
-                                                                <span className="text-blue-500 text-xs font-mono">{c.q}x</span>
+                                                                <span className="text-blue-400 text-xs font-mono">{c.q}x</span>
                                                             </div>
                                                         ))}
                                                     </div>
@@ -559,7 +551,136 @@
                                     </div>
                                 )}
 
-                                {/* CONTEÚDO: GERADOR */}
+                                {/* CONTEÚDO: CARTELA INTERATIVA */}
+                                {stats && activeTab === 'cartela' && (
+                                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 animate-in fade-in slide-in-from-right-4">
+                                        <div className="xl:col-span-2 bg-slate-800 rounded-2xl p-6 md:p-8 border border-slate-700 shadow-xl">
+                                            <div className="flex justify-between items-end mb-6">
+                                                <div>
+                                                    <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                                                        <HandPointer className="text-emerald-400" /> Cartela Interativa
+                                                    </h2>
+                                                    <p className="text-slate-400 text-sm mt-1">Clique nos números. Borda <span className="text-red-400 font-bold">vermelha (quentes)</span>, borda <span className="text-blue-400 font-bold">azul (frios)</span>.</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className={`text-2xl font-bold ${manualSelection.length === 15 ? 'text-emerald-400' : 'text-slate-300'}`}>
+                                                        {manualSelection.length}
+                                                    </span>
+                                                    <span className="text-slate-500">/15</span>
+                                                </div>
+                                            </div>
+
+                                            {/* GRID DA CARTELA 5x5 */}
+                                            <div className="grid grid-cols-5 gap-2 sm:gap-4 max-w-lg mx-auto">
+                                                {Array.from({length: 25}, (_, i) => i + 1).map(n => {
+                                                    const isSelected = manualSelection.includes(n);
+                                                    const isHot = stats.hot.some(h => h.n === n);
+                                                    const isCold = stats.cold.some(c => c.n === n);
+                                                    const freq = stats.freqs[n-1];
+                                                    
+                                                    // Estilização condicional baseada na matemática
+                                                    let btnClass = "relative flex flex-col items-center justify-center p-2 sm:p-3 rounded-xl border-2 transition-all duration-200 shadow-md ";
+                                                    
+                                                    if (isSelected) {
+                                                        btnClass += "bg-emerald-600 border-emerald-400 text-white scale-95 shadow-[0_0_15px_rgba(16,185,129,0.5)]";
+                                                    } else if (isHot) {
+                                                        btnClass += "bg-slate-800 border-red-500/70 text-slate-200 hover:bg-slate-700 hover:border-red-400";
+                                                    } else if (isCold) {
+                                                        btnClass += "bg-slate-800 border-blue-500/70 text-slate-200 hover:bg-slate-700 hover:border-blue-400";
+                                                    } else {
+                                                        btnClass += "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:border-slate-500";
+                                                    }
+
+                                                    return (
+                                                        <button 
+                                                            key={n} 
+                                                            onClick={() => toggleManualSelection(n)}
+                                                            className={btnClass}
+                                                            disabled={!isSelected && manualSelection.length >= 15}
+                                                        >
+                                                            {/* Indicadores Visuais para Quente/Frio */}
+                                                            {isHot && !isSelected && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-[0_0_5px_red]"></span>}
+                                                            {isCold && !isSelected && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_5px_blue]"></span>}
+                                                            
+                                                            <span className="text-xl sm:text-2xl font-black">{n.toString().padStart(2, '0')}</span>
+                                                            <span className="text-[9px] sm:text-[10px] font-mono mt-1 opacity-80 bg-black/30 px-1.5 rounded-sm">saiu {freq}x</span>
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+
+                                            <div className="mt-8 flex justify-center gap-4">
+                                                <button 
+                                                    onClick={() => setManualSelection([])}
+                                                    className="px-6 py-3 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors font-semibold"
+                                                >
+                                                    Limpar Cartela
+                                                </button>
+                                                <button 
+                                                    onClick={() => {
+                                                        handleSaveGame(manualSelection);
+                                                        alert("Jogo salvo com sucesso!");
+                                                        setManualSelection([]);
+                                                    }}
+                                                    disabled={manualSelection.length !== 15}
+                                                    className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-bold flex items-center gap-2 shadow-lg transition-all"
+                                                >
+                                                    <BookmarkPlus size={20} /> Salvar Este Jogo
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* ESTATÍSTICAS DO JOGO MONTADO */}
+                                        <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 h-fit sticky top-24 shadow-lg">
+                                            <h3 className="text-lg font-bold text-white mb-6 border-b border-slate-700 pb-4">Raio-X do seu Jogo</h3>
+                                            
+                                            {manualSelection.length === 0 ? (
+                                                <div className="text-center text-slate-500 py-10">
+                                                    <Info size={32} className="mx-auto mb-3 opacity-50" />
+                                                    Selecione números na cartela para ver a análise matemática em tempo real.
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-4">
+                                                    {(() => {
+                                                        const mStats = getManualStats();
+                                                        return (
+                                                            <>
+                                                                <div className="flex justify-between items-center bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                                                                    <span className="text-slate-400 text-sm">Soma Total</span>
+                                                                    <span className={`font-bold ${mStats.sum >= 190 && mStats.sum <= 210 ? 'text-emerald-400' : 'text-amber-400'}`}>{mStats.sum}</span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                                                                    <span className="text-slate-400 text-sm">Ímpares / Pares</span>
+                                                                    <span className={`font-bold ${mStats.odds >= 7 && mStats.odds <= 9 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                                        {mStats.odds} / {mStats.evens}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                                                                    <span className="text-slate-400 text-sm">Números Primos <i className="fa-solid fa-circle-question text-slate-600 text-[10px]" title="2, 3, 5, 7, 11, 13, 17, 19, 23"></i></span>
+                                                                    <span className={`font-bold ${mStats.primes >= 4 && mStats.primes <= 6 ? 'text-emerald-400' : 'text-amber-400'}`}>{mStats.primes}</span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                                                                    <span className="text-slate-400 text-sm">Na Moldura (Borda)</span>
+                                                                    <span className={`font-bold ${mStats.moldura >= 9 && mStats.moldura <= 11 ? 'text-emerald-400' : 'text-amber-400'}`}>{mStats.moldura}</span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                                                                    <span className="text-slate-400 text-sm">Repetidas do Último</span>
+                                                                    <span className={`font-bold ${mStats.repeats >= 8 && mStats.repeats <= 10 ? 'text-emerald-400' : 'text-amber-400'}`}>{mStats.repeats}</span>
+                                                                </div>
+                                                            </>
+                                                        )
+                                                    })()}
+                                                    
+                                                    <div className="mt-4 text-xs text-slate-500 bg-black/20 p-3 rounded-lg">
+                                                        <span className="text-emerald-400 font-bold">Verde</span> significa que sua escolha está dentro do padrão ideal histórico da Caixa.
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* CONTEÚDO: GERADOR IA */}
                                 {activeTab === 'generator' && (
                                     <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 animate-in fade-in slide-in-from-right-4">
                                         <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 h-fit sticky top-24 shadow-lg">
@@ -569,31 +690,35 @@
                                             
                                             <div className="space-y-6">
                                                 <div>
-                                                    <div className="flex justify-between text-sm mb-2">
+                                                    <div className="flex justify-between text-sm mb-1">
                                                         <label className="text-slate-300">Quantidade de Ímpares</label>
                                                         <span className="text-emerald-400 font-bold bg-emerald-900/30 px-2 rounded">{genFilters.oddTarget}</span>
                                                     </div>
-                                                    <input 
-                                                        type="range" min="5" max="11" 
-                                                        value={genFilters.oddTarget} 
-                                                        onChange={e => setGenFilters({...genFilters, oddTarget: Number(e.target.value)})}
-                                                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                                                    />
-                                                    <p className="text-xs text-slate-500 mt-1">Recomendação estatística: 7 ou 8</p>
+                                                    <input type="range" min="5" max="11" value={genFilters.oddTarget} onChange={e => setGenFilters({...genFilters, oddTarget: Number(e.target.value)})} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"/>
+                                                </div>
+                                                
+                                                <div>
+                                                    <div className="flex justify-between text-sm mb-1">
+                                                        <label className="text-slate-300">Repetidas do Último</label>
+                                                        <span className="text-blue-400 font-bold bg-blue-900/30 px-2 rounded">{genFilters.repeatsTarget}</span>
+                                                    </div>
+                                                    <input type="range" min="5" max="11" value={genFilters.repeatsTarget} onChange={e => setGenFilters({...genFilters, repeatsTarget: Number(e.target.value)})} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"/>
                                                 </div>
 
                                                 <div>
-                                                    <div className="flex justify-between text-sm mb-2">
-                                                        <label className="text-slate-300">Repetidas do Último Sorteio</label>
-                                                        <span className="text-blue-400 font-bold bg-blue-900/30 px-2 rounded">{genFilters.repeatsTarget}</span>
+                                                    <div className="flex justify-between text-sm mb-1">
+                                                        <label className="text-slate-300">Números Primos</label>
+                                                        <span className="text-purple-400 font-bold bg-purple-900/30 px-2 rounded">{genFilters.primosTarget}</span>
                                                     </div>
-                                                    <input 
-                                                        type="range" min="5" max="11" 
-                                                        value={genFilters.repeatsTarget} 
-                                                        onChange={e => setGenFilters({...genFilters, repeatsTarget: Number(e.target.value)})}
-                                                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                                                    />
-                                                    <p className="text-xs text-slate-500 mt-1">Recomendação estatística: 8 ou 9</p>
+                                                    <input type="range" min="3" max="8" value={genFilters.primosTarget} onChange={e => setGenFilters({...genFilters, primosTarget: Number(e.target.value)})} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"/>
+                                                </div>
+
+                                                <div>
+                                                    <div className="flex justify-between text-sm mb-1">
+                                                        <label className="text-slate-300">Números na Moldura</label>
+                                                        <span className="text-amber-400 font-bold bg-amber-900/30 px-2 rounded">{genFilters.molduraTarget}</span>
+                                                    </div>
+                                                    <input type="range" min="7" max="13" value={genFilters.molduraTarget} onChange={e => setGenFilters({...genFilters, molduraTarget: Number(e.target.value)})} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500"/>
                                                 </div>
 
                                                 <div className="pt-4 border-t border-slate-700">
@@ -603,7 +728,7 @@
                                                         className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/50 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                                                     >
                                                         {isGenerating ? <RefreshCw className="animate-spin" size={20} /> : <Wand2 size={20} />}
-                                                        {isGenerating ? 'Calculando...' : 'Gerar 5 Combinações'}
+                                                        {isGenerating ? 'Cruzando Estatísticas...' : 'Gerar 5 Combinações'}
                                                     </button>
                                                 </div>
                                             </div>
@@ -620,7 +745,7 @@
                                             {generatedGames.length === 0 ? (
                                                 <div className="border-2 border-dashed border-slate-700 bg-slate-800/50 rounded-2xl p-12 text-center text-slate-500 flex flex-col items-center justify-center">
                                                     <Cpu size={48} className="mb-4 opacity-50 text-slate-400" />
-                                                    <p className="max-w-md">Ajuste os parâmetros no painel lateral e clique em gerar para criar combinações matematicamente otimizadas.</p>
+                                                    <p className="max-w-md">O sistema vai cruzar todos os filtros selecionados para entregar combinações que atendam as suas exigências matemáticas.</p>
                                                 </div>
                                             ) : (
                                                 generatedGames.map((game, idx) => {
@@ -631,14 +756,16 @@
                                                         <div className="flex justify-between items-start mb-4">
                                                             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                                                                 <span className="bg-emerald-900/50 text-emerald-400 text-xs font-bold px-3 py-1.5 rounded w-fit">OPÇÃO {idx + 1}</span>
-                                                                <div className="text-xs text-slate-400 flex gap-3">
+                                                                <div className="text-xs text-slate-400 flex flex-wrap gap-x-3 gap-y-1">
                                                                     <span>Soma: <b className="text-white">{game.meta.sum}</b></span>
                                                                     <span>Ímpares: <b className="text-white">{game.meta.odds}</b></span>
                                                                     <span>Repetidas: <b className="text-white">{game.meta.repeats}</b></span>
+                                                                    <span>Primos: <b className="text-white">{game.meta.primes}</b></span>
+                                                                    <span>Moldura: <b className="text-white">{game.meta.moldura}</b></span>
                                                                 </div>
                                                             </div>
                                                             <button 
-                                                                onClick={() => handleSaveGame(game)}
+                                                                onClick={() => handleSaveGame(game.numbers)}
                                                                 disabled={isSaved}
                                                                 className={`p-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-bold ${isSaved ? 'bg-slate-700 text-emerald-500 cursor-default' : 'bg-slate-700 hover:bg-slate-600 text-white active:scale-95'}`}
                                                             >
