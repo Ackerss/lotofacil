@@ -18,6 +18,9 @@
     <!-- Babel para traduzir o JSX no navegador -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
+    <!-- SheetJS (Leitor de Planilhas Excel e CSV) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
     <style>
         /* Estilização da barra de rolagem */
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -33,7 +36,7 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // --- SUBSTITUIÇÃO DOS ÍCONES (Usando FontAwesome via CDN) ---
+        // --- ÍCONES (FontAwesome) ---
         const createIcon = (faClass) => ({size = 20, className = ''}) => (
             <i className={`${faClass} ${className}`} style={{ fontSize: size, width: size, height: size, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}></i>
         );
@@ -54,9 +57,8 @@
         const Copy = createIcon('fa-solid fa-copy');
         const CheckCircle2 = createIcon('fa-solid fa-circle-check');
         const Info = createIcon('fa-solid fa-circle-info');
-
-        // --- CONFIGURAÇÃO ---
-        const API_URL = 'https://script.google.com/macros/s/AKfycbzKmqFJ-g1mmXuyCPfETPLb_wFDjvDwFguy4lB6zUVOlVoCTOieLRPMF4C9T8xuiNq-mA/exec';
+        const Upload = createIcon('fa-solid fa-upload');
+        const FileExcel = createIcon('fa-solid fa-file-excel');
 
         // --- COMPONENTES VISUAIS ---
         const StatCard = ({ title, value, subtext, color = "blue" }) => {
@@ -94,86 +96,114 @@
         // --- LÓGICA PRINCIPAL ---
         function LotoFacilApp() {
             const [activeTab, setActiveTab] = useState('dashboard');
-            const [history, setHistory] = useState([]);
-            const [loading, setLoading] = useState(true);
+            const [loading, setLoading] = useState(false);
             const [error, setError] = useState(null);
             const [copySuccess, setCopySuccess] = useState(false);
 
-            // Estado do Gerador
-            const [genFilters, setGenFilters] = useState({
-                oddTarget: 8, 
-                sumMin: 190,
-                sumMax: 210,
-                repeatsTarget: 9,
-            });
-            const [generatedGames, setGeneratedGames] = useState([]);
-            const [isGenerating, setIsGenerating] = useState(false);
-            
-            // Persistência
-            const [savedGames, setSavedGames] = useState(() => {
+            // Histórico de Jogos (Persiste no navegador para não precisar importar toda vez)
+            const [history, setHistory] = useState(() => {
                 try {
-                    const local = localStorage.getItem('lotofacil_jacson_v1');
+                    const local = localStorage.getItem('lotofacil_history_v2');
                     return local ? JSON.parse(local) : [];
                 } catch (e) { return []; }
             });
 
-            useEffect(() => {
-                localStorage.setItem('lotofacil_jacson_v1', JSON.stringify(savedGames));
-            }, [savedGames]);
+            // Persistência dos Jogos Salvos
+            const [savedGames, setSavedGames] = useState(() => {
+                try {
+                    const local = localStorage.getItem('lotofacil_saved_v2');
+                    return local ? JSON.parse(local) : [];
+                } catch (e) { return []; }
+            });
 
-            // Fetching de Dados Robusto
-            const fetchData = async () => {
+            // Estado do Gerador
+            const [genFilters, setGenFilters] = useState({ oddTarget: 8, sumMin: 190, sumMax: 210, repeatsTarget: 9 });
+            const [generatedGames, setGeneratedGames] = useState([]);
+            const [isGenerating, setIsGenerating] = useState(false);
+
+            // Salvando no LocalStorage
+            useEffect(() => { localStorage.setItem('lotofacil_history_v2', JSON.stringify(history)); }, [history]);
+            useEffect(() => { localStorage.setItem('lotofacil_saved_v2', JSON.stringify(savedGames)); }, [savedGames]);
+
+            // --- LEITURA DA PLANILHA EXCEL/CSV ---
+            const handleFileUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
                 setLoading(true);
                 setError(null);
-                try {
-                    const response = await fetch(`${API_URL}?t=${Date.now()}`);
-                    const text = await response.text();
-                    
-                    let json;
+
+                const reader = new FileReader();
+                reader.onload = (evt) => {
                     try {
-                        json = JSON.parse(text);
-                    } catch (e) {
-                        throw new Error("A API não retornou um JSON válido. Verifique se o Google Script está publicado para 'Qualquer Pessoa'.");
-                    }
-
-                    let rawData = Array.isArray(json) ? json : (json.data || json.result || Object.values(json));
-                    if (!rawData || rawData.length === 0) throw new Error("A planilha retornou vazia.");
-
-                    // Parser flexível
-                    const cleanData = rawData.map(item => {
-                        if (!item) return null;
+                        const data = new Uint8Array(evt.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
                         
-                        let concurso = Number(item.Concurso || item.concurso || item.CONCURSO || (Array.isArray(item) ? item[0] : null));
-                        let dezenas = [];
+                        // Extrai como matriz (array de arrays) para evitar problemas de nomes de colunas
+                        const rawJson = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-                        for (let i = 1; i <= 25; i++) {
-                            const val = item[`Bola${i}`] || item[`bola${i}`] || item[`B${i}`];
-                            if (val) dezenas.push(Number(val));
+                        const cleanData = [];
+                        rawJson.forEach(row => {
+                            if (!Array.isArray(row) || row.length < 5) return;
+
+                            let concurso = Number(row[0]);
+                            if (isNaN(concurso) || concurso <= 0) return; // Ignora cabeçalhos
+
+                            let dezenas = [];
+                            
+                            // Tentativa 1: Formato padrão da Caixa (Colunas C a Q -> Índices 2 a 16)
+                            for (let i = 2; i <= 16; i++) {
+                                const val = Number(row[i]);
+                                if (!isNaN(val) && val >= 1 && val <= 25) {
+                                    dezenas.push(val);
+                                }
+                            }
+
+                            // Tentativa 2: Varredura de segurança caso o arquivo seja diferente
+                            if (dezenas.length < 15) {
+                                dezenas = [];
+                                for (let i = 1; i < row.length; i++) {
+                                    const val = Number(row[i]);
+                                    if (!isNaN(val) && val >= 1 && val <= 25) {
+                                        dezenas.push(val);
+                                    }
+                                }
+                            }
+
+                            dezenas = [...new Set(dezenas)]; // Remove duplicadas se houver
+
+                            if (dezenas.length >= 15) {
+                                cleanData.push({
+                                    Concurso: concurso,
+                                    Dezenas: dezenas.slice(0, 15).sort((a, b) => a - b)
+                                });
+                            }
+                        });
+
+                        if (cleanData.length === 0) {
+                            throw new Error("Não encontrei sorteios válidos. Certifique-se de usar a planilha oficial da Caixa (ou um arquivo onde a 1ª coluna é o Concurso e as outras são as dezenas).");
                         }
 
-                        if (dezenas.length < 15 && typeof item === 'object') {
-                            const nums = Object.values(item).map(Number).filter(n => !isNaN(n) && n >= 1 && n <= 25);
-                            dezenas = [...new Set(nums)].slice(0, 15);
-                        }
-
-                        if (!concurso || dezenas.length < 15) return null;
-
-                        return {
-                            Concurso: concurso,
-                            Dezenas: dezenas.sort((a, b) => a - b).slice(0, 15)
-                        };
-                    }).filter(Boolean);
-
-                    if (cleanData.length === 0) throw new Error("Não foi possível extrair os concursos e as dezenas. Verifique as colunas.");
-
-                    cleanData.sort((a, b) => b.Concurso - a.Concurso);
-                    setHistory(cleanData);
-                } catch (err) {
-                    console.error(err);
-                    setError(err.message);
-                } finally {
+                        // Ordena do mais recente pro mais antigo
+                        cleanData.sort((a, b) => b.Concurso - a.Concurso);
+                        setHistory(cleanData);
+                        setActiveTab('dashboard');
+                    } catch (err) {
+                        console.error(err);
+                        setError(err.message);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+                reader.onerror = () => {
+                    setError("Erro ao ler o arquivo no seu computador.");
                     setLoading(false);
-                }
+                };
+                
+                reader.readAsArrayBuffer(file);
+                e.target.value = null; // Reseta o input para permitir subir o mesmo arquivo de novo se quiser
             };
 
             const loadDemoData = () => {
@@ -186,9 +216,7 @@
                 setError(null);
             };
 
-            useEffect(() => { fetchData(); }, []);
-
-            // Estatísticas Calculadas
+            // --- ESTATÍSTICAS ---
             const stats = useMemo(() => {
                 if (!history.length) return null;
                 
@@ -218,14 +246,14 @@
                 };
             }, [history]);
 
-            // Gerador Inteligente
+            // --- GERADOR IA ---
             const handleGenerate = () => {
                 setIsGenerating(true);
-                setTimeout(() => { // Timeout para não travar a UI imediatamente
+                setTimeout(() => { 
                     const baseSet = stats ? new Set(stats.lastDraw.Dezenas) : new Set();
                     let newGames = [];
                     let attempts = 0;
-                    const MAX_ATTEMPTS = 5000; // Limite de segurança
+                    const MAX_ATTEMPTS = 5000; 
 
                     while (newGames.length < 5 && attempts < MAX_ATTEMPTS) {
                         attempts++;
@@ -297,78 +325,109 @@
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3">
                                  {stats && (
-                                    <div className="hidden md:block text-right mr-4">
-                                        <p className="text-xs text-slate-400">Último Concurso</p>
+                                    <div className="hidden md:block text-right mr-3">
+                                        <p className="text-xs text-slate-400">Último</p>
                                         <p className="text-lg font-bold text-white leading-none">#{stats.lastDraw.Concurso}</p>
                                     </div>
                                 )}
-                                <button 
-                                    onClick={fetchData} 
-                                    disabled={loading}
-                                    className="bg-slate-700 hover:bg-slate-600 p-2.5 rounded-full transition-all active:scale-95 disabled:opacity-50"
-                                    title="Recarregar Dados"
-                                >
-                                    <RefreshCw size={18} className={loading ? "animate-spin text-emerald-400" : "text-white"} />
-                                </button>
+                                
+                                {history.length > 0 && (
+                                    <button 
+                                        onClick={() => { if(window.confirm('Tem certeza que deseja apagar o histórico atual?')) setHistory([]); }}
+                                        className="bg-slate-700 hover:bg-red-500 text-slate-300 hover:text-white p-2.5 rounded-lg transition-colors shadow-lg"
+                                        title="Limpar Histórico"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                )}
+
+                                <label className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg transition-all active:scale-95 cursor-pointer flex items-center gap-2 font-bold text-sm shadow-lg shadow-emerald-900/50">
+                                    <Upload size={16} />
+                                    <span className="hidden sm:inline">Importar Planilha</span>
+                                    <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} className="hidden" />
+                                </label>
                             </div>
                         </div>
                     </header>
 
-                    {/* NAVEGAÇÃO MOBILE */}
-                    <div className="md:hidden bg-slate-800/80 backdrop-blur border-b border-slate-700 overflow-x-auto sticky top-16 z-40">
-                        <div className="flex p-2 gap-2 min-w-max">
-                            {[
-                                { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
-                                { id: 'generator', label: 'Gerador IA', icon: Cpu },
-                                { id: 'saved', label: 'Salvos', icon: Save },
-                                { id: 'data', label: 'Tabela', icon: Database },
-                            ].map(tab => (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => setActiveTab(tab.id)}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                                        activeTab === tab.id ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-700'
-                                    }`}
-                                >
-                                    <tab.icon size={16} /> {tab.label}
-                                </button>
-                            ))}
+                    {/* NAVEGAÇÃO MOBILE (Só mostra se tiver histórico) */}
+                    {history.length > 0 && (
+                        <div className="md:hidden bg-slate-800/80 backdrop-blur border-b border-slate-700 overflow-x-auto sticky top-16 z-40">
+                            <div className="flex p-2 gap-2 min-w-max">
+                                {[
+                                    { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
+                                    { id: 'generator', label: 'Gerador IA', icon: Cpu },
+                                    { id: 'saved', label: 'Salvos', icon: Save },
+                                    { id: 'data', label: 'Tabela', icon: Database },
+                                ].map(tab => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                            activeTab === tab.id ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-700'
+                                        }`}
+                                    >
+                                        <tab.icon size={16} /> {tab.label}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     <main className="max-w-6xl mx-auto px-4 py-6 md:py-8">
                         
-                        {/* TRATAMENTO DE ERRO */}
+                        {/* ERROS */}
                         {error && (
                             <div className="mb-8 bg-red-900/20 border border-red-500/50 p-6 rounded-xl animate-in fade-in slide-in-from-top-4">
                                 <div className="flex items-start gap-3 text-red-200">
                                     <AlertTriangle size={24} className="text-red-500 shrink-0 mt-1" />
                                     <div>
-                                        <h3 className="font-bold text-lg text-white">Falha na Conexão com a Planilha</h3>
+                                        <h3 className="font-bold text-lg text-white">Falha na Leitura do Arquivo</h3>
                                         <p className="text-sm opacity-90 mb-4">{error}</p>
-                                        <div className="flex flex-wrap gap-3">
-                                            <button onClick={loadDemoData} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-bold transition-colors">
-                                                Carregar Dados Demo (Para Teste)
-                                            </button>
-                                        </div>
+                                        <button onClick={() => setError(null)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-bold transition-colors">
+                                            Entendi, tentar novamente
+                                        </button>
                                     </div>
                                 </div>
                             </div>
                         )}
 
-                        {/* LOADING INICIAL */}
-                        {loading && !history.length && !error ? (
-                            <div className="flex flex-col items-center justify-center h-64 gap-4">
+                        {/* ESTADO DE LOADING */}
+                        {loading && (
+                            <div className="flex flex-col items-center justify-center h-64 gap-4 animate-in fade-in">
                                 <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                                <p className="text-slate-400 animate-pulse">Sincronizando banco de dados...</p>
+                                <p className="text-slate-400 animate-pulse font-bold">Lendo e mapeando resultados...</p>
                             </div>
-                        ) : (
+                        )}
+
+                        {/* ESTADO VAZIO (SEM HISTÓRICO) */}
+                        {!loading && history.length === 0 && !error && (
+                            <div className="flex flex-col items-center justify-center py-20 px-4 text-center bg-slate-800/40 rounded-3xl border-2 border-dashed border-slate-700 animate-in fade-in zoom-in-95">
+                                <FileExcel size={72} className="text-emerald-500 mb-6 opacity-80" />
+                                <h2 className="text-3xl font-extrabold text-white mb-3 tracking-tight">Comece sua Análise</h2>
+                                <p className="text-slate-400 max-w-lg mb-8 text-lg">
+                                    Baixe a planilha oficial de resultados no site da Caixa e importe aqui. O sistema armazena automaticamente os dados no seu navegador.
+                                </p>
+                                
+                                <label className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-4 rounded-xl transition-all active:scale-95 cursor-pointer flex items-center gap-3 font-bold text-lg shadow-xl shadow-emerald-900/50">
+                                    <Upload size={24} />
+                                    Importar Planilha Oficial (.xlsx ou .csv)
+                                    <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} className="hidden" />
+                                </label>
+                                
+                                <button onClick={loadDemoData} className="mt-8 text-sm text-slate-500 hover:text-slate-300 underline underline-offset-4 transition-colors">
+                                    Não tenho a planilha agora, carregar dados de teste
+                                </button>
+                            </div>
+                        )}
+
+                        {/* DASHBOARD PRINCIPAL (Só mostra com dados carregados) */}
+                        {!loading && history.length > 0 && !error && (
                             <>
                                 {/* NAVEGAÇÃO DESKTOP */}
-                                {!error && (
-                                <div className="hidden md:flex mb-8 bg-slate-800 p-1 rounded-xl w-fit border border-slate-700">
+                                <div className="hidden md:flex mb-8 bg-slate-800 p-1 rounded-xl w-fit border border-slate-700 shadow-md">
                                      {[
                                         { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard },
                                         { id: 'generator', label: 'Gerador Inteligente', icon: Cpu },
@@ -388,13 +447,11 @@
                                         </button>
                                     ))}
                                 </div>
-                                )}
 
                                 {/* CONTEÚDO: DASHBOARD */}
                                 {stats && activeTab === 'dashboard' && (
                                     <div className="animate-in fade-in duration-500 space-y-6">
-                                        
-                                        {/* DESTAQUE ÚLTIMO JOGO */}
+                                        {/* Destaque Último Jogo */}
                                         <div className="bg-slate-800 rounded-2xl p-6 md:p-8 border border-slate-700 shadow-xl relative overflow-hidden group">
                                             <div className="absolute top-0 right-0 p-32 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                                             
@@ -415,7 +472,7 @@
                                             </div>
                                         </div>
 
-                                        {/* CARDS STATS */}
+                                        {/* Cards Stats */}
                                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                                             <StatCard title="Média Soma" value={stats.avgSum} subtext="Ideal Histórico: 190 a 210" color="blue" />
                                             <StatCard title="Média Ímpares" value={stats.avgOdd} subtext="Ideal Histórico: 7 a 9" color="purple" />
@@ -423,16 +480,16 @@
                                             <StatCard title="Dezena Mais Fria" value={`Nº ${stats.cold[0].n.toString().padStart(2,'0')}`} subtext={`Saiu só ${stats.cold[0].q} vezes`} color="red" />
                                         </div>
 
-                                        {/* HEATMAP & HOT/COLD */}
+                                        {/* Heatmap & Hot/Cold */}
                                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                            <div className="lg:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700 overflow-hidden">
+                                            <div className="lg:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700 overflow-hidden shadow-lg">
                                                 <h3 className="text-white font-bold mb-6 flex items-center gap-2">
                                                     <BarChart2 className="text-emerald-400" /> Mapa de Calor (Frequência Global)
                                                 </h3>
                                                 <div className="h-48 flex items-end gap-1 px-2">
                                                     {stats.freqs.map((val, idx) => {
                                                         const max = Math.max(...stats.freqs);
-                                                        const h = max > 0 ? Math.max((val / max) * 100, 5) : 5; // mínimo 5% pra aparecer a barra
+                                                        const h = max > 0 ? Math.max((val / max) * 100, 5) : 5; 
                                                         const isHot = stats.hot.some(h => h.n === idx+1);
                                                         return (
                                                             <div key={idx} className="flex-1 flex flex-col items-center group relative h-full justify-end">
@@ -450,17 +507,14 @@
                                                 </div>
                                             </div>
 
-                                            <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 flex flex-col justify-between gap-6">
+                                            <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 flex flex-col justify-between gap-6 shadow-lg">
                                                 <div>
-                                                    <h3 className="text-emerald-400 font-bold text-sm uppercase mb-3 flex items-center gap-2">
-                                                        🔥 Top 5 Quentes
-                                                    </h3>
+                                                    <h3 className="text-emerald-400 font-bold text-sm uppercase mb-3 flex items-center gap-2">🔥 Top 5 Quentes</h3>
                                                     <div className="flex flex-col gap-2">
                                                         {stats.hot.map(h => (
                                                             <div key={h.n} className="bg-slate-900/50 px-3 py-2 rounded-lg text-sm flex justify-between items-center">
                                                                 <span className="font-bold text-white flex items-center gap-2">
-                                                                    <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                                                    Nº {h.n.toString().padStart(2,'0')}
+                                                                    <div className="w-2 h-2 rounded-full bg-emerald-500"></div> Nº {h.n.toString().padStart(2,'0')}
                                                                 </span>
                                                                 <span className="text-emerald-500 text-xs font-mono">{h.q}x</span>
                                                             </div>
@@ -468,15 +522,12 @@
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <h3 className="text-blue-400 font-bold text-sm uppercase mb-3 flex items-center gap-2">
-                                                        ❄️ Top 5 Frias
-                                                    </h3>
+                                                    <h3 className="text-blue-400 font-bold text-sm uppercase mb-3 flex items-center gap-2">❄️ Top 5 Frias</h3>
                                                     <div className="flex flex-col gap-2">
                                                         {stats.cold.map(c => (
                                                             <div key={c.n} className="bg-slate-900/50 px-3 py-2 rounded-lg text-sm flex justify-between items-center">
                                                                 <span className="font-bold text-white flex items-center gap-2">
-                                                                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                                                                    Nº {c.n.toString().padStart(2,'0')}
+                                                                    <div className="w-2 h-2 rounded-full bg-blue-500"></div> Nº {c.n.toString().padStart(2,'0')}
                                                                 </span>
                                                                 <span className="text-blue-500 text-xs font-mono">{c.q}x</span>
                                                             </div>
@@ -491,9 +542,7 @@
                                 {/* CONTEÚDO: GERADOR */}
                                 {activeTab === 'generator' && (
                                     <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 animate-in fade-in slide-in-from-right-4">
-                                        
-                                        {/* Controles do Gerador */}
-                                        <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 h-fit sticky top-24">
+                                        <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 h-fit sticky top-24 shadow-lg">
                                             <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
                                                 <Sliders className="text-emerald-400" /> Parâmetros da IA
                                             </h2>
@@ -540,7 +589,6 @@
                                             </div>
                                         </div>
 
-                                        {/* Resultados do Gerador */}
                                         <div className="xl:col-span-2 space-y-4">
                                             <div className="flex justify-between items-center mb-2">
                                                 <h2 className="text-white font-bold text-lg">Jogos Gerados</h2>
@@ -592,8 +640,7 @@
                                     <div className="space-y-6 animate-in fade-in">
                                         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-md">
                                             <h2 className="font-bold text-white flex items-center gap-2 text-lg">
-                                                <Save className="text-emerald-400" />
-                                                Meus Jogos Salvos <span className="bg-slate-700 px-2 py-0.5 rounded text-sm">{savedGames.length}</span>
+                                                <Save className="text-emerald-400" /> Meus Jogos Salvos <span className="bg-slate-700 px-2 py-0.5 rounded text-sm">{savedGames.length}</span>
                                             </h2>
                                             <div className="flex gap-3 w-full sm:w-auto">
                                                 <button 
@@ -643,16 +690,8 @@
                                                                 </span>
                                                             )}
                                                         </div>
-
                                                         <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                                                            {game.numbers.map(n => (
-                                                                <Ball 
-                                                                    key={n} 
-                                                                    n={n} 
-                                                                    size="sm" 
-                                                                    highlight={stats && lastResult.includes(n)} 
-                                                                />
-                                                            ))}
+                                                            {game.numbers.map(n => <Ball key={n} n={n} size="sm" highlight={stats && lastResult.includes(n)} />)}
                                                         </div>
                                                     </div>
                                                 );
@@ -668,7 +707,7 @@
                                             <h2 className="font-bold text-white flex items-center gap-2">
                                                 <Database className="text-emerald-400" size={20} /> Histórico Recente
                                             </h2>
-                                            <span className="text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded">{history.length} concursos carregados</span>
+                                            <span className="text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded">{history.length} concursos</span>
                                         </div>
                                         <div className="max-h-[600px] overflow-auto custom-scrollbar">
                                             <table className="w-full text-left text-sm text-slate-300 border-collapse">
@@ -705,7 +744,6 @@
             );
         }
 
-        // Renderiza o App
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<LotoFacilApp />);
     </script>
