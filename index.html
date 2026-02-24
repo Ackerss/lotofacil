@@ -1,662 +1,713 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-    Dice5, LayoutDashboard, Cpu, Save, Database, AlertTriangle, 
-    BarChart2, Sliders, Wand2, BookmarkPlus, Trash2, Download, 
-    RefreshCw, Copy, CheckCircle2, Info
-} from 'lucide-react';
-
-// --- CONFIGURAÇÃO ---
-const API_URL = 'https://script.google.com/macros/s/AKfycbzKmqFJ-g1mmXuyCPfETPLb_wFDjvDwFguy4lB6zUVOlVoCTOieLRPMF4C9T8xuiNq-mA/exec';
-
-// --- COMPONENTES VISUAIS ---
-const StatCard = ({ title, value, subtext, color = "blue" }) => {
-    const colors = {
-        blue: "border-blue-500 text-blue-400",
-        emerald: "border-emerald-500 text-emerald-400",
-        red: "border-red-500 text-red-400",
-        purple: "border-purple-500 text-purple-400",
-        amber: "border-amber-500 text-amber-400"
-    };
-    const borderColor = colors[color]?.split(' ')[0] || "border-blue-500";
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LotoAnalítica - Dashboard Pro</title>
     
-    return (
-        <div className={`bg-slate-800/80 backdrop-blur-sm p-4 rounded-xl border-l-4 ${borderColor} shadow-lg shadow-black/20 hover:bg-slate-700/80 transition-colors`}>
-            <h3 className="text-gray-400 text-xs uppercase tracking-wider font-bold">{title}</h3>
-            <div className="text-2xl font-bold mt-1 text-white">{value}</div>
-            {subtext && <div className="text-xs text-gray-500 mt-1">{subtext}</div>}
-        </div>
-    );
-};
-
-const Ball = ({ n, size = "md", highlight = false }) => {
-    const sizeClasses = size === 'sm' ? 'w-6 h-6 text-xs' : size === 'lg' ? 'w-10 h-10 text-base' : 'w-8 h-8 text-sm';
-    const bgClasses = highlight 
-        ? 'bg-gradient-to-br from-emerald-500 to-teal-700 border-emerald-400 shadow-emerald-500/30' 
-        : 'bg-slate-700 border-slate-600 text-slate-200';
-
-    return (
-        <div className={`${sizeClasses} ${bgClasses} flex items-center justify-center rounded-full font-bold shadow-md border text-white transition-all`}>
-            {n?.toString().padStart(2, '0') || '--'}
-        </div>
-    );
-};
-
-// --- LÓGICA PRINCIPAL ---
-export default function LotoFacilApp() {
-    const [activeTab, setActiveTab] = useState('dashboard');
-    const [history, setHistory] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [copySuccess, setCopySuccess] = useState(false);
-
-    // Estado do Gerador
-    const [genFilters, setGenFilters] = useState({
-        oddTarget: 8, 
-        sumMin: 190,
-        sumMax: 210,
-        repeatsTarget: 9,
-    });
-    const [generatedGames, setGeneratedGames] = useState([]);
-    const [isGenerating, setIsGenerating] = useState(false);
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
     
-    // Persistência
-    const [savedGames, setSavedGames] = useState(() => {
-        if (typeof window !== 'undefined') {
-            try {
-                const local = localStorage.getItem('lotofacil_jacson_v1');
-                return local ? JSON.parse(local) : [];
-            } catch (e) { return []; }
-        }
-        return [];
-    });
+    <!-- FontAwesome para os ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- React e ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel para traduzir o JSX no navegador -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('lotofacil_jacson_v1', JSON.stringify(savedGames));
-        }
-    }, [savedGames]);
+    <style>
+        /* Estilização da barra de rolagem */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
+        body { background-color: #0f172a; color: #f1f5f9; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
 
-    // Fetching de Dados Robusto
-    const fetchData = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const response = await fetch(`${API_URL}?t=${Date.now()}`);
-            const text = await response.text();
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- SUBSTITUIÇÃO DOS ÍCONES (Usando FontAwesome via CDN) ---
+        const createIcon = (faClass) => ({size = 20, className = ''}) => (
+            <i className={`${faClass} ${className}`} style={{ fontSize: size, width: size, height: size, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}></i>
+        );
+        
+        const Dice5 = createIcon('fa-solid fa-dice-five');
+        const LayoutDashboard = createIcon('fa-solid fa-border-all');
+        const Cpu = createIcon('fa-solid fa-microchip');
+        const Save = createIcon('fa-solid fa-floppy-disk');
+        const Database = createIcon('fa-solid fa-database');
+        const AlertTriangle = createIcon('fa-solid fa-triangle-exclamation');
+        const BarChart2 = createIcon('fa-solid fa-chart-simple');
+        const Sliders = createIcon('fa-solid fa-sliders');
+        const Wand2 = createIcon('fa-solid fa-wand-magic-sparkles');
+        const BookmarkPlus = createIcon('fa-solid fa-bookmark');
+        const Trash2 = createIcon('fa-solid fa-trash');
+        const Download = createIcon('fa-solid fa-download');
+        const RefreshCw = createIcon('fa-solid fa-arrows-rotate');
+        const Copy = createIcon('fa-solid fa-copy');
+        const CheckCircle2 = createIcon('fa-solid fa-circle-check');
+        const Info = createIcon('fa-solid fa-circle-info');
+
+        // --- CONFIGURAÇÃO ---
+        const API_URL = 'https://script.google.com/macros/s/AKfycbzKmqFJ-g1mmXuyCPfETPLb_wFDjvDwFguy4lB6zUVOlVoCTOieLRPMF4C9T8xuiNq-mA/exec';
+
+        // --- COMPONENTES VISUAIS ---
+        const StatCard = ({ title, value, subtext, color = "blue" }) => {
+            const colors = {
+                blue: "border-blue-500 text-blue-400",
+                emerald: "border-emerald-500 text-emerald-400",
+                red: "border-red-500 text-red-400",
+                purple: "border-purple-500 text-purple-400",
+                amber: "border-amber-500 text-amber-400"
+            };
+            const borderColor = colors[color]?.split(' ')[0] || "border-blue-500";
             
-            let json;
-            try {
-                json = JSON.parse(text);
-            } catch (e) {
-                throw new Error("A API não retornou um JSON válido. Verifique se o Google Script está publicado para 'Qualquer Pessoa'.");
-            }
+            return (
+                <div className={`bg-slate-800/80 backdrop-blur-sm p-4 rounded-xl border-l-4 ${borderColor} shadow-lg shadow-black/20 hover:bg-slate-700/80 transition-colors`}>
+                    <h3 className="text-gray-400 text-xs uppercase tracking-wider font-bold">{title}</h3>
+                    <div className="text-2xl font-bold mt-1 text-white">{value}</div>
+                    {subtext && <div className="text-xs text-gray-500 mt-1">{subtext}</div>}
+                </div>
+            );
+        };
 
-            let rawData = Array.isArray(json) ? json : (json.data || json.result || Object.values(json));
-            if (!rawData || rawData.length === 0) throw new Error("A planilha retornou vazia.");
+        const Ball = ({ n, size = "md", highlight = false }) => {
+            const sizeClasses = size === 'sm' ? 'w-6 h-6 text-xs' : size === 'lg' ? 'w-10 h-10 text-base' : 'w-8 h-8 text-sm';
+            const bgClasses = highlight 
+                ? 'bg-gradient-to-br from-emerald-500 to-teal-700 border-emerald-400 shadow-emerald-500/30' 
+                : 'bg-slate-700 border-slate-600 text-slate-200';
 
-            // Parser flexível
-            const cleanData = rawData.map(item => {
-                if (!item) return null;
+            return (
+                <div className={`${sizeClasses} ${bgClasses} flex items-center justify-center rounded-full font-bold shadow-md border text-white transition-all`}>
+                    {n?.toString().padStart(2, '0') || '--'}
+                </div>
+            );
+        };
+
+        // --- LÓGICA PRINCIPAL ---
+        function LotoFacilApp() {
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [history, setHistory] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+            const [copySuccess, setCopySuccess] = useState(false);
+
+            // Estado do Gerador
+            const [genFilters, setGenFilters] = useState({
+                oddTarget: 8, 
+                sumMin: 190,
+                sumMax: 210,
+                repeatsTarget: 9,
+            });
+            const [generatedGames, setGeneratedGames] = useState([]);
+            const [isGenerating, setIsGenerating] = useState(false);
+            
+            // Persistência
+            const [savedGames, setSavedGames] = useState(() => {
+                try {
+                    const local = localStorage.getItem('lotofacil_jacson_v1');
+                    return local ? JSON.parse(local) : [];
+                } catch (e) { return []; }
+            });
+
+            useEffect(() => {
+                localStorage.setItem('lotofacil_jacson_v1', JSON.stringify(savedGames));
+            }, [savedGames]);
+
+            // Fetching de Dados Robusto
+            const fetchData = async () => {
+                setLoading(true);
+                setError(null);
+                try {
+                    const response = await fetch(`${API_URL}?t=${Date.now()}`);
+                    const text = await response.text();
+                    
+                    let json;
+                    try {
+                        json = JSON.parse(text);
+                    } catch (e) {
+                        throw new Error("A API não retornou um JSON válido. Verifique se o Google Script está publicado para 'Qualquer Pessoa'.");
+                    }
+
+                    let rawData = Array.isArray(json) ? json : (json.data || json.result || Object.values(json));
+                    if (!rawData || rawData.length === 0) throw new Error("A planilha retornou vazia.");
+
+                    // Parser flexível
+                    const cleanData = rawData.map(item => {
+                        if (!item) return null;
+                        
+                        let concurso = Number(item.Concurso || item.concurso || item.CONCURSO || (Array.isArray(item) ? item[0] : null));
+                        let dezenas = [];
+
+                        for (let i = 1; i <= 25; i++) {
+                            const val = item[`Bola${i}`] || item[`bola${i}`] || item[`B${i}`];
+                            if (val) dezenas.push(Number(val));
+                        }
+
+                        if (dezenas.length < 15 && typeof item === 'object') {
+                            const nums = Object.values(item).map(Number).filter(n => !isNaN(n) && n >= 1 && n <= 25);
+                            dezenas = [...new Set(nums)].slice(0, 15);
+                        }
+
+                        if (!concurso || dezenas.length < 15) return null;
+
+                        return {
+                            Concurso: concurso,
+                            Dezenas: dezenas.sort((a, b) => a - b).slice(0, 15)
+                        };
+                    }).filter(Boolean);
+
+                    if (cleanData.length === 0) throw new Error("Não foi possível extrair os concursos e as dezenas. Verifique as colunas.");
+
+                    cleanData.sort((a, b) => b.Concurso - a.Concurso);
+                    setHistory(cleanData);
+                } catch (err) {
+                    console.error(err);
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const loadDemoData = () => {
+                const mock = [];
+                for (let i = 3100; i > 3000; i--) {
+                    let pool = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
+                    mock.push({ Concurso: i, Dezenas: pool.slice(0, 15).sort((a,b)=>a-b) });
+                }
+                setHistory(mock);
+                setError(null);
+            };
+
+            useEffect(() => { fetchData(); }, []);
+
+            // Estatísticas Calculadas
+            const stats = useMemo(() => {
+                if (!history.length) return null;
                 
-                let concurso = Number(item.Concurso || item.concurso || item.CONCURSO || (Array.isArray(item) ? item[0] : null));
-                let dezenas = [];
+                const lastDraw = history[0];
+                const freqs = Array(25).fill(0);
+                let sumTotal = 0, oddTotal = 0;
 
-                for (let i = 1; i <= 25; i++) {
-                    const val = item[`Bola${i}`] || item[`bola${i}`] || item[`B${i}`];
-                    if (val) dezenas.push(Number(val));
-                }
+                history.forEach(game => {
+                    let gameSum = 0;
+                    game.Dezenas.forEach(n => {
+                        if (n >= 1 && n <= 25) freqs[n-1]++;
+                        gameSum += n;
+                    });
+                    sumTotal += gameSum;
+                    oddTotal += game.Dezenas.filter(n => n % 2 !== 0).length;
+                });
 
-                if (dezenas.length < 15 && typeof item === 'object') {
-                    const nums = Object.values(item).map(Number).filter(n => !isNaN(n) && n >= 1 && n <= 25);
-                    dezenas = [...new Set(nums)].slice(0, 15);
-                }
-
-                if (!concurso || dezenas.length < 15) return null;
+                const sortedFreqs = freqs.map((q, i) => ({ n: i+1, q })).sort((a,b) => b.q - a.q);
 
                 return {
-                    Concurso: concurso,
-                    Dezenas: dezenas.sort((a, b) => a - b).slice(0, 15)
+                    lastDraw,
+                    avgSum: Math.round(sumTotal / history.length),
+                    avgOdd: (oddTotal / history.length).toFixed(1),
+                    hot: sortedFreqs.slice(0, 5),
+                    cold: sortedFreqs.slice(-5).reverse(),
+                    freqs
                 };
-            }).filter(Boolean);
+            }, [history]);
 
-            if (cleanData.length === 0) throw new Error("Não foi possível extrair os concursos e as dezenas. Verifique as colunas.");
+            // Gerador Inteligente
+            const handleGenerate = () => {
+                setIsGenerating(true);
+                setTimeout(() => { // Timeout para não travar a UI imediatamente
+                    const baseSet = stats ? new Set(stats.lastDraw.Dezenas) : new Set();
+                    let newGames = [];
+                    let attempts = 0;
+                    const MAX_ATTEMPTS = 5000; // Limite de segurança
 
-            cleanData.sort((a, b) => b.Concurso - a.Concurso);
-            setHistory(cleanData);
-        } catch (err) {
-            console.error(err);
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+                    while (newGames.length < 5 && attempts < MAX_ATTEMPTS) {
+                        attempts++;
+                        let pool = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
+                        const game = pool.slice(0, 15).sort((a,b) => a-b);
+                        
+                        const sum = game.reduce((a,b) => a+b, 0);
+                        if (sum < genFilters.sumMin || sum > genFilters.sumMax) continue;
 
-    const loadDemoData = () => {
-        const mock = [];
-        for (let i = 3100; i > 3000; i--) {
-            let pool = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
-            mock.push({ Concurso: i, Dezenas: pool.slice(0, 15).sort((a,b)=>a-b) });
-        }
-        setHistory(mock);
-        setError(null);
-    };
+                        const odds = game.filter(n => n % 2 !== 0).length;
+                        if (Math.abs(odds - genFilters.oddTarget) > 1) continue; 
 
-    useEffect(() => { fetchData(); }, []);
+                        const repeats = game.filter(n => baseSet.has(n)).length;
+                        if (baseSet.size > 0 && Math.abs(repeats - genFilters.repeatsTarget) > 1) continue;
 
-    // Estatísticas Calculadas
-    const stats = useMemo(() => {
-        if (!history.length) return null;
-        
-        const lastDraw = history[0];
-        const freqs = Array(25).fill(0);
-        let sumTotal = 0, oddTotal = 0;
+                        newGames.push({
+                            id: Date.now() + attempts,
+                            numbers: game,
+                            meta: { sum, odds, repeats }
+                        });
+                    }
+                    
+                    if (newGames.length === 0) {
+                        alert("Filtros muito restritos! Ajuste a Soma, Ímpares ou Repetidas e tente novamente.");
+                    } else {
+                        setGeneratedGames(newGames);
+                    }
+                    setIsGenerating(false);
+                }, 50);
+            };
 
-        history.forEach(game => {
-            let gameSum = 0;
-            game.Dezenas.forEach(n => {
-                if (n >= 1 && n <= 25) freqs[n-1]++;
-                gameSum += n;
-            });
-            sumTotal += gameSum;
-            oddTotal += game.Dezenas.filter(n => n % 2 !== 0).length;
-        });
+            const handleSaveGame = (game) => {
+                if(!savedGames.some(g => JSON.stringify(g.numbers) === JSON.stringify(game.numbers))) {
+                    setSavedGames(prev => [game, ...prev]);
+                }
+            };
 
-        const sortedFreqs = freqs.map((q, i) => ({ n: i+1, q })).sort((a,b) => b.q - a.q);
+            const copyToClipboard = () => {
+                const text = savedGames.map((g,i) => `Jogo ${i+1}: ${g.numbers.map(n => n.toString().padStart(2,'0')).join('-')}`).join('\n');
+                navigator.clipboard.writeText(text);
+                setCopySuccess(true);
+                setTimeout(() => setCopySuccess(false), 2000);
+            };
 
-        return {
-            lastDraw,
-            avgSum: Math.round(sumTotal / history.length),
-            avgOdd: (oddTotal / history.length).toFixed(1),
-            hot: sortedFreqs.slice(0, 5),
-            cold: sortedFreqs.slice(-5).reverse(),
-            freqs
-        };
-    }, [history]);
+            const exportTxt = () => {
+                const text = savedGames.map((g,i) => `Jogo ${i+1}: ${g.numbers.map(n => n.toString().padStart(2,'0')).join('-')}`).join('\n');
+                const blob = new Blob([text], {type: 'text/plain'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; 
+                a.download = 'Natubrava_Lotofacil.txt';
+                a.click();
+            };
 
-    // Gerador Inteligente
-    const handleGenerate = () => {
-        setIsGenerating(true);
-        setTimeout(() => { // Timeout para não travar a UI imediatamente
-            const baseSet = stats ? new Set(stats.lastDraw.Dezenas) : new Set();
-            let newGames = [];
-            let attempts = 0;
-            const MAX_ATTEMPTS = 5000; // Limite de segurança
-
-            while (newGames.length < 5 && attempts < MAX_ATTEMPTS) {
-                attempts++;
-                let pool = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
-                const game = pool.slice(0, 15).sort((a,b) => a-b);
-                
-                const sum = game.reduce((a,b) => a+b, 0);
-                if (sum < genFilters.sumMin || sum > genFilters.sumMax) continue;
-
-                const odds = game.filter(n => n % 2 !== 0).length;
-                if (Math.abs(odds - genFilters.oddTarget) > 1) continue; 
-
-                const repeats = game.filter(n => baseSet.has(n)).length;
-                if (baseSet.size > 0 && Math.abs(repeats - genFilters.repeatsTarget) > 1) continue;
-
-                newGames.push({
-                    id: Date.now() + attempts,
-                    numbers: game,
-                    meta: { sum, odds, repeats }
-                });
-            }
-            
-            if (newGames.length === 0) {
-                alert("Filtros muito restritos! Ajuste a Soma, Ímpares ou Repetidas e tente novamente.");
-            } else {
-                setGeneratedGames(newGames);
-            }
-            setIsGenerating(false);
-        }, 50);
-    };
-
-    const handleSaveGame = (game) => {
-        if(!savedGames.some(g => JSON.stringify(g.numbers) === JSON.stringify(game.numbers))) {
-            setSavedGames(prev => [game, ...prev]);
-        }
-    };
-
-    const copyToClipboard = () => {
-        const text = savedGames.map((g,i) => `Jogo ${i+1}: ${g.numbers.map(n => n.toString().padStart(2,'0')).join('-')}`).join('\n');
-        navigator.clipboard.writeText(text);
-        setCopySuccess(true);
-        setTimeout(() => setCopySuccess(false), 2000);
-    };
-
-    const exportTxt = () => {
-        const text = savedGames.map((g,i) => `Jogo ${i+1}: ${g.numbers.map(n => n.toString().padStart(2,'0')).join('-')}`).join('\n');
-        const blob = new Blob([text], {type: 'text/plain'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; 
-        a.download = 'Natubrava_Lotofacil.txt';
-        a.click();
-    };
-
-    // --- RENDERIZAÇÃO ---
-    return (
-        <div className="min-h-screen bg-slate-900 text-slate-100 font-sans selection:bg-emerald-500 selection:text-white pb-20">
-            
-            {/* HEADER */}
-            <header className="bg-slate-800 border-b border-slate-700 sticky top-0 z-50 shadow-md">
-                <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-gradient-to-tr from-emerald-500 to-teal-700 p-2 rounded-lg shadow-lg">
-                            <Dice5 className="text-white" size={24} />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-white tracking-tight">Loto<span className="text-emerald-400">Analítica</span></h1>
-                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Dashboard Pro</p>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                         {stats && (
-                            <div className="hidden md:block text-right mr-4">
-                                <p className="text-xs text-slate-400">Último Concurso</p>
-                                <p className="text-lg font-bold text-white leading-none">#{stats.lastDraw.Concurso}</p>
-                            </div>
-                        )}
-                        <button 
-                            onClick={fetchData} 
-                            disabled={loading}
-                            className="bg-slate-700 hover:bg-slate-600 p-2.5 rounded-full transition-all active:scale-95 disabled:opacity-50"
-                            title="Recarregar Dados"
-                        >
-                            <RefreshCw size={18} className={loading ? "animate-spin text-emerald-400" : "text-white"} />
-                        </button>
-                    </div>
-                </div>
-            </header>
-
-            {/* NAVEGAÇÃO MOBILE */}
-            <div className="md:hidden bg-slate-800/80 backdrop-blur border-b border-slate-700 overflow-x-auto sticky top-16 z-40">
-                <div className="flex p-2 gap-2 min-w-max">
-                    {[
-                        { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
-                        { id: 'generator', label: 'Gerador IA', icon: Cpu },
-                        { id: 'saved', label: 'Salvos', icon: Save },
-                        { id: 'data', label: 'Tabela', icon: Database },
-                    ].map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                                activeTab === tab.id ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-700'
-                            }`}
-                        >
-                            <tab.icon size={16} /> {tab.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            <main className="max-w-6xl mx-auto px-4 py-6 md:py-8">
-                
-                {/* TRATAMENTO DE ERRO */}
-                {error && (
-                    <div className="mb-8 bg-red-900/20 border border-red-500/50 p-6 rounded-xl animate-in fade-in slide-in-from-top-4">
-                        <div className="flex items-start gap-3 text-red-200">
-                            <AlertTriangle size={24} className="text-red-500 shrink-0 mt-1" />
-                            <div>
-                                <h3 className="font-bold text-lg text-white">Falha na Conexão com a Planilha</h3>
-                                <p className="text-sm opacity-90 mb-4">{error}</p>
-                                <div className="flex flex-wrap gap-3">
-                                    <button onClick={loadDemoData} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-bold transition-colors">
-                                        Carregar Dados Demo (Para Teste)
-                                    </button>
+            // --- RENDERIZAÇÃO ---
+            return (
+                <div className="min-h-screen bg-slate-900 text-slate-100 font-sans selection:bg-emerald-500 selection:text-white pb-20">
+                    
+                    {/* HEADER */}
+                    <header className="bg-slate-800 border-b border-slate-700 sticky top-0 z-50 shadow-md">
+                        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-gradient-to-tr from-emerald-500 to-teal-700 p-2 rounded-lg shadow-lg">
+                                    <Dice5 className="text-white" size={24} />
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-bold text-white tracking-tight">Loto<span className="text-emerald-400">Analítica</span></h1>
+                                    <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Dashboard Pro</p>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                )}
 
-                {/* LOADING INICIAL */}
-                {loading && !history.length && !error ? (
-                    <div className="flex flex-col items-center justify-center h-64 gap-4">
-                        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                        <p className="text-slate-400 animate-pulse">Sincronizando banco de dados...</p>
-                    </div>
-                ) : (
-                    <>
-                        {/* NAVEGAÇÃO DESKTOP */}
-                        {!error && (
-                        <div className="hidden md:flex mb-8 bg-slate-800 p-1 rounded-xl w-fit border border-slate-700">
-                             {[
-                                { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard },
-                                { id: 'generator', label: 'Gerador Inteligente', icon: Cpu },
-                                { id: 'saved', label: `Jogos Salvos (${savedGames.length})`, icon: Save },
-                                { id: 'data', label: 'Base de Dados', icon: Database },
+                            <div className="flex items-center gap-4">
+                                 {stats && (
+                                    <div className="hidden md:block text-right mr-4">
+                                        <p className="text-xs text-slate-400">Último Concurso</p>
+                                        <p className="text-lg font-bold text-white leading-none">#{stats.lastDraw.Concurso}</p>
+                                    </div>
+                                )}
+                                <button 
+                                    onClick={fetchData} 
+                                    disabled={loading}
+                                    className="bg-slate-700 hover:bg-slate-600 p-2.5 rounded-full transition-all active:scale-95 disabled:opacity-50"
+                                    title="Recarregar Dados"
+                                >
+                                    <RefreshCw size={18} className={loading ? "animate-spin text-emerald-400" : "text-white"} />
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* NAVEGAÇÃO MOBILE */}
+                    <div className="md:hidden bg-slate-800/80 backdrop-blur border-b border-slate-700 overflow-x-auto sticky top-16 z-40">
+                        <div className="flex p-2 gap-2 min-w-max">
+                            {[
+                                { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
+                                { id: 'generator', label: 'Gerador IA', icon: Cpu },
+                                { id: 'saved', label: 'Salvos', icon: Save },
+                                { id: 'data', label: 'Tabela', icon: Database },
                             ].map(tab => (
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
-                                    className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
-                                        activeTab === tab.id 
-                                        ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50' 
-                                        : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                        activeTab === tab.id ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-700'
                                     }`}
                                 >
-                                    <tab.icon size={18} /> {tab.label}
+                                    <tab.icon size={16} /> {tab.label}
                                 </button>
                             ))}
                         </div>
-                        )}
+                    </div>
 
-                        {/* CONTEÚDO: DASHBOARD */}
-                        {stats && activeTab === 'dashboard' && (
-                            <div className="animate-in fade-in duration-500 space-y-6">
-                                
-                                {/* DESTAQUE ÚLTIMO JOGO */}
-                                <div className="bg-slate-800 rounded-2xl p-6 md:p-8 border border-slate-700 shadow-xl relative overflow-hidden group">
-                                    <div className="absolute top-0 right-0 p-32 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-                                    
-                                    <div className="flex flex-col xl:flex-row justify-between items-center gap-6 relative z-10">
-                                        <div className="text-center xl:text-left w-full xl:w-auto">
-                                            <h2 className="text-slate-400 font-semibold text-sm uppercase tracking-wide mb-1 flex items-center justify-center xl:justify-start gap-2">
-                                                <Info size={14}/> Resultado Mais Recente
-                                            </h2>
-                                            <div className="text-4xl md:text-5xl font-extrabold text-white mb-3">Concurso #{stats.lastDraw.Concurso}</div>
-                                            <div className="flex flex-wrap gap-2 justify-center xl:justify-start">
-                                                <span className="text-emerald-400 bg-emerald-900/30 border border-emerald-800/50 px-3 py-1 rounded text-sm font-medium">Soma: {stats.lastDraw.Dezenas.reduce((a,b)=>a+b,0)}</span>
-                                                <span className="text-blue-400 bg-blue-900/30 border border-blue-800/50 px-3 py-1 rounded text-sm font-medium">Ímpares: {stats.lastDraw.Dezenas.filter(n=>n%2!==0).length}</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-wrap justify-center xl:justify-end gap-2 xl:gap-3 max-w-2xl">
-                                            {stats.lastDraw.Dezenas.map(n => <Ball key={n} n={n} size="lg" highlight={true} />)}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* CARDS STATS */}
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                    <StatCard title="Média Soma" value={stats.avgSum} subtext="Ideal Histórico: 190 a 210" color="blue" />
-                                    <StatCard title="Média Ímpares" value={stats.avgOdd} subtext="Ideal Histórico: 7 a 9" color="purple" />
-                                    <StatCard title="Dezena Mais Quente" value={`Nº ${stats.hot[0].n.toString().padStart(2,'0')}`} subtext={`Saiu ${stats.hot[0].q} vezes`} color="emerald" />
-                                    <StatCard title="Dezena Mais Fria" value={`Nº ${stats.cold[0].n.toString().padStart(2,'0')}`} subtext={`Saiu só ${stats.cold[0].q} vezes`} color="red" />
-                                </div>
-
-                                {/* HEATMAP & HOT/COLD */}
-                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                    <div className="lg:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700 overflow-hidden">
-                                        <h3 className="text-white font-bold mb-6 flex items-center gap-2">
-                                            <BarChart2 className="text-emerald-400" /> Mapa de Calor (Frequência Global)
-                                        </h3>
-                                        <div className="h-48 flex items-end gap-1 px-2">
-                                            {stats.freqs.map((val, idx) => {
-                                                const max = Math.max(...stats.freqs);
-                                                const h = max > 0 ? Math.max((val / max) * 100, 5) : 5; // mínimo 5% pra aparecer a barra
-                                                const isHot = stats.hot.some(h => h.n === idx+1);
-                                                return (
-                                                    <div key={idx} className="flex-1 flex flex-col items-center group relative h-full justify-end">
-                                                        <div 
-                                                            className={`w-full rounded-t-sm transition-all duration-500 ${isHot ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-slate-600 group-hover:bg-slate-400'}`}
-                                                            style={{ height: `${h}%` }}
-                                                        ></div>
-                                                        <span className="text-[10px] text-slate-400 mt-2 font-mono hidden sm:block">{idx+1}</span>
-                                                        <div className="absolute bottom-full mb-2 bg-black text-xs px-2 py-1 rounded hidden group-hover:block whitespace-nowrap z-20">
-                                                            Nº {idx+1}: {val} aparições
-                                                        </div>
-                                                    </div>
-                                                )
-                                            })}
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 flex flex-col justify-between gap-6">
-                                        <div>
-                                            <h3 className="text-emerald-400 font-bold text-sm uppercase mb-3 flex items-center gap-2">
-                                                🔥 Top 5 Quentes
-                                            </h3>
-                                            <div className="flex flex-col gap-2">
-                                                {stats.hot.map(h => (
-                                                    <div key={h.n} className="bg-slate-900/50 px-3 py-2 rounded-lg text-sm flex justify-between items-center">
-                                                        <span className="font-bold text-white flex items-center gap-2">
-                                                            <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                                            Nº {h.n.toString().padStart(2,'0')}
-                                                        </span>
-                                                        <span className="text-emerald-500 text-xs font-mono">{h.q}x</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <h3 className="text-blue-400 font-bold text-sm uppercase mb-3 flex items-center gap-2">
-                                                ❄️ Top 5 Frias
-                                            </h3>
-                                            <div className="flex flex-col gap-2">
-                                                {stats.cold.map(c => (
-                                                    <div key={c.n} className="bg-slate-900/50 px-3 py-2 rounded-lg text-sm flex justify-between items-center">
-                                                        <span className="font-bold text-white flex items-center gap-2">
-                                                            <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                                                            Nº {c.n.toString().padStart(2,'0')}
-                                                        </span>
-                                                        <span className="text-blue-500 text-xs font-mono">{c.q}x</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* CONTEÚDO: GERADOR */}
-                        {activeTab === 'generator' && (
-                            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 animate-in fade-in slide-in-from-right-4">
-                                
-                                {/* Controles do Gerador */}
-                                <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 h-fit sticky top-24">
-                                    <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                                        <Sliders className="text-emerald-400" /> Parâmetros da IA
-                                    </h2>
-                                    
-                                    <div className="space-y-6">
-                                        <div>
-                                            <div className="flex justify-between text-sm mb-2">
-                                                <label className="text-slate-300">Quantidade de Ímpares</label>
-                                                <span className="text-emerald-400 font-bold bg-emerald-900/30 px-2 rounded">{genFilters.oddTarget}</span>
-                                            </div>
-                                            <input 
-                                                type="range" min="5" max="11" 
-                                                value={genFilters.oddTarget} 
-                                                onChange={e => setGenFilters({...genFilters, oddTarget: Number(e.target.value)})}
-                                                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                                            />
-                                            <p className="text-xs text-slate-500 mt-1">Recomendação estatística: 7 ou 8</p>
-                                        </div>
-
-                                        <div>
-                                            <div className="flex justify-between text-sm mb-2">
-                                                <label className="text-slate-300">Repetidas do Último Sorteio</label>
-                                                <span className="text-blue-400 font-bold bg-blue-900/30 px-2 rounded">{genFilters.repeatsTarget}</span>
-                                            </div>
-                                            <input 
-                                                type="range" min="5" max="11" 
-                                                value={genFilters.repeatsTarget} 
-                                                onChange={e => setGenFilters({...genFilters, repeatsTarget: Number(e.target.value)})}
-                                                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                                            />
-                                            <p className="text-xs text-slate-500 mt-1">Recomendação estatística: 8 ou 9</p>
-                                        </div>
-
-                                        <div className="pt-4 border-t border-slate-700">
-                                            <button 
-                                                onClick={handleGenerate}
-                                                disabled={!stats || isGenerating}
-                                                className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/50 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                                            >
-                                                {isGenerating ? <RefreshCw className="animate-spin" size={20} /> : <Wand2 size={20} />}
-                                                {isGenerating ? 'Calculando...' : 'Gerar 5 Combinações'}
+                    <main className="max-w-6xl mx-auto px-4 py-6 md:py-8">
+                        
+                        {/* TRATAMENTO DE ERRO */}
+                        {error && (
+                            <div className="mb-8 bg-red-900/20 border border-red-500/50 p-6 rounded-xl animate-in fade-in slide-in-from-top-4">
+                                <div className="flex items-start gap-3 text-red-200">
+                                    <AlertTriangle size={24} className="text-red-500 shrink-0 mt-1" />
+                                    <div>
+                                        <h3 className="font-bold text-lg text-white">Falha na Conexão com a Planilha</h3>
+                                        <p className="text-sm opacity-90 mb-4">{error}</p>
+                                        <div className="flex flex-wrap gap-3">
+                                            <button onClick={loadDemoData} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-bold transition-colors">
+                                                Carregar Dados Demo (Para Teste)
                                             </button>
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                        )}
 
-                                {/* Resultados do Gerador */}
-                                <div className="xl:col-span-2 space-y-4">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <h2 className="text-white font-bold text-lg">Jogos Gerados</h2>
-                                        {generatedGames.length > 0 && (
-                                            <button onClick={() => setGeneratedGames([])} className="text-sm text-red-400 hover:text-red-300 transition-colors">Limpar Tela</button>
-                                        )}
-                                    </div>
+                        {/* LOADING INICIAL */}
+                        {loading && !history.length && !error ? (
+                            <div className="flex flex-col items-center justify-center h-64 gap-4">
+                                <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                                <p className="text-slate-400 animate-pulse">Sincronizando banco de dados...</p>
+                            </div>
+                        ) : (
+                            <>
+                                {/* NAVEGAÇÃO DESKTOP */}
+                                {!error && (
+                                <div className="hidden md:flex mb-8 bg-slate-800 p-1 rounded-xl w-fit border border-slate-700">
+                                     {[
+                                        { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard },
+                                        { id: 'generator', label: 'Gerador Inteligente', icon: Cpu },
+                                        { id: 'saved', label: `Jogos Salvos (${savedGames.length})`, icon: Save },
+                                        { id: 'data', label: 'Base de Dados', icon: Database },
+                                    ].map(tab => (
+                                        <button
+                                            key={tab.id}
+                                            onClick={() => setActiveTab(tab.id)}
+                                            className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                                                activeTab === tab.id 
+                                                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50' 
+                                                : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                                            }`}
+                                        >
+                                            <tab.icon size={18} /> {tab.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                )}
 
-                                    {generatedGames.length === 0 ? (
-                                        <div className="border-2 border-dashed border-slate-700 bg-slate-800/50 rounded-2xl p-12 text-center text-slate-500 flex flex-col items-center justify-center">
-                                            <Cpu size={48} className="mb-4 opacity-50 text-slate-400" />
-                                            <p className="max-w-md">Ajuste os parâmetros no painel lateral e clique em gerar para criar combinações matematicamente otimizadas.</p>
-                                        </div>
-                                    ) : (
-                                        generatedGames.map((game, idx) => {
-                                            const isSaved = savedGames.some(g => JSON.stringify(g.numbers) === JSON.stringify(game.numbers));
+                                {/* CONTEÚDO: DASHBOARD */}
+                                {stats && activeTab === 'dashboard' && (
+                                    <div className="animate-in fade-in duration-500 space-y-6">
+                                        
+                                        {/* DESTAQUE ÚLTIMO JOGO */}
+                                        <div className="bg-slate-800 rounded-2xl p-6 md:p-8 border border-slate-700 shadow-xl relative overflow-hidden group">
+                                            <div className="absolute top-0 right-0 p-32 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                                             
-                                            return (
-                                            <div key={game.id} className="bg-slate-800 rounded-xl p-5 border-l-4 border-emerald-500 shadow-lg animate-in slide-in-from-bottom-2 fade-in relative group">
-                                                <div className="flex justify-between items-start mb-4">
-                                                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                                                        <span className="bg-emerald-900/50 text-emerald-400 text-xs font-bold px-3 py-1.5 rounded w-fit">OPÇÃO {idx + 1}</span>
-                                                        <div className="text-xs text-slate-400 flex gap-3">
-                                                            <span>Soma: <b className="text-white">{game.meta.sum}</b></span>
-                                                            <span>Ímpares: <b className="text-white">{game.meta.odds}</b></span>
-                                                            <span>Repetidas: <b className="text-white">{game.meta.repeats}</b></span>
-                                                        </div>
+                                            <div className="flex flex-col xl:flex-row justify-between items-center gap-6 relative z-10">
+                                                <div className="text-center xl:text-left w-full xl:w-auto">
+                                                    <h2 className="text-slate-400 font-semibold text-sm uppercase tracking-wide mb-1 flex items-center justify-center xl:justify-start gap-2">
+                                                        <Info size={14}/> Resultado Mais Recente
+                                                    </h2>
+                                                    <div className="text-4xl md:text-5xl font-extrabold text-white mb-3">Concurso #{stats.lastDraw.Concurso}</div>
+                                                    <div className="flex flex-wrap gap-2 justify-center xl:justify-start">
+                                                        <span className="text-emerald-400 bg-emerald-900/30 border border-emerald-800/50 px-3 py-1 rounded text-sm font-medium">Soma: {stats.lastDraw.Dezenas.reduce((a,b)=>a+b,0)}</span>
+                                                        <span className="text-blue-400 bg-blue-900/30 border border-blue-800/50 px-3 py-1 rounded text-sm font-medium">Ímpares: {stats.lastDraw.Dezenas.filter(n=>n%2!==0).length}</span>
                                                     </div>
+                                                </div>
+                                                <div className="flex flex-wrap justify-center xl:justify-end gap-2 xl:gap-3 max-w-2xl">
+                                                    {stats.lastDraw.Dezenas.map(n => <Ball key={n} n={n} size="lg" highlight={true} />)}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* CARDS STATS */}
+                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                            <StatCard title="Média Soma" value={stats.avgSum} subtext="Ideal Histórico: 190 a 210" color="blue" />
+                                            <StatCard title="Média Ímpares" value={stats.avgOdd} subtext="Ideal Histórico: 7 a 9" color="purple" />
+                                            <StatCard title="Dezena Mais Quente" value={`Nº ${stats.hot[0].n.toString().padStart(2,'0')}`} subtext={`Saiu ${stats.hot[0].q} vezes`} color="emerald" />
+                                            <StatCard title="Dezena Mais Fria" value={`Nº ${stats.cold[0].n.toString().padStart(2,'0')}`} subtext={`Saiu só ${stats.cold[0].q} vezes`} color="red" />
+                                        </div>
+
+                                        {/* HEATMAP & HOT/COLD */}
+                                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                            <div className="lg:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700 overflow-hidden">
+                                                <h3 className="text-white font-bold mb-6 flex items-center gap-2">
+                                                    <BarChart2 className="text-emerald-400" /> Mapa de Calor (Frequência Global)
+                                                </h3>
+                                                <div className="h-48 flex items-end gap-1 px-2">
+                                                    {stats.freqs.map((val, idx) => {
+                                                        const max = Math.max(...stats.freqs);
+                                                        const h = max > 0 ? Math.max((val / max) * 100, 5) : 5; // mínimo 5% pra aparecer a barra
+                                                        const isHot = stats.hot.some(h => h.n === idx+1);
+                                                        return (
+                                                            <div key={idx} className="flex-1 flex flex-col items-center group relative h-full justify-end">
+                                                                <div 
+                                                                    className={`w-full rounded-t-sm transition-all duration-500 ${isHot ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-slate-600 group-hover:bg-slate-400'}`}
+                                                                    style={{ height: `${h}%` }}
+                                                                ></div>
+                                                                <span className="text-[10px] text-slate-400 mt-2 font-mono hidden sm:block">{idx+1}</span>
+                                                                <div className="absolute bottom-full mb-2 bg-black text-xs px-2 py-1 rounded hidden group-hover:block whitespace-nowrap z-20">
+                                                                    Nº {idx+1}: {val} aparições
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                    })}
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 flex flex-col justify-between gap-6">
+                                                <div>
+                                                    <h3 className="text-emerald-400 font-bold text-sm uppercase mb-3 flex items-center gap-2">
+                                                        🔥 Top 5 Quentes
+                                                    </h3>
+                                                    <div className="flex flex-col gap-2">
+                                                        {stats.hot.map(h => (
+                                                            <div key={h.n} className="bg-slate-900/50 px-3 py-2 rounded-lg text-sm flex justify-between items-center">
+                                                                <span className="font-bold text-white flex items-center gap-2">
+                                                                    <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                                                    Nº {h.n.toString().padStart(2,'0')}
+                                                                </span>
+                                                                <span className="text-emerald-500 text-xs font-mono">{h.q}x</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-blue-400 font-bold text-sm uppercase mb-3 flex items-center gap-2">
+                                                        ❄️ Top 5 Frias
+                                                    </h3>
+                                                    <div className="flex flex-col gap-2">
+                                                        {stats.cold.map(c => (
+                                                            <div key={c.n} className="bg-slate-900/50 px-3 py-2 rounded-lg text-sm flex justify-between items-center">
+                                                                <span className="font-bold text-white flex items-center gap-2">
+                                                                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                                                                    Nº {c.n.toString().padStart(2,'0')}
+                                                                </span>
+                                                                <span className="text-blue-500 text-xs font-mono">{c.q}x</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* CONTEÚDO: GERADOR */}
+                                {activeTab === 'generator' && (
+                                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 animate-in fade-in slide-in-from-right-4">
+                                        
+                                        {/* Controles do Gerador */}
+                                        <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 h-fit sticky top-24">
+                                            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                                                <Sliders className="text-emerald-400" /> Parâmetros da IA
+                                            </h2>
+                                            
+                                            <div className="space-y-6">
+                                                <div>
+                                                    <div className="flex justify-between text-sm mb-2">
+                                                        <label className="text-slate-300">Quantidade de Ímpares</label>
+                                                        <span className="text-emerald-400 font-bold bg-emerald-900/30 px-2 rounded">{genFilters.oddTarget}</span>
+                                                    </div>
+                                                    <input 
+                                                        type="range" min="5" max="11" 
+                                                        value={genFilters.oddTarget} 
+                                                        onChange={e => setGenFilters({...genFilters, oddTarget: Number(e.target.value)})}
+                                                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                                    />
+                                                    <p className="text-xs text-slate-500 mt-1">Recomendação estatística: 7 ou 8</p>
+                                                </div>
+
+                                                <div>
+                                                    <div className="flex justify-between text-sm mb-2">
+                                                        <label className="text-slate-300">Repetidas do Último Sorteio</label>
+                                                        <span className="text-blue-400 font-bold bg-blue-900/30 px-2 rounded">{genFilters.repeatsTarget}</span>
+                                                    </div>
+                                                    <input 
+                                                        type="range" min="5" max="11" 
+                                                        value={genFilters.repeatsTarget} 
+                                                        onChange={e => setGenFilters({...genFilters, repeatsTarget: Number(e.target.value)})}
+                                                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                                    />
+                                                    <p className="text-xs text-slate-500 mt-1">Recomendação estatística: 8 ou 9</p>
+                                                </div>
+
+                                                <div className="pt-4 border-t border-slate-700">
                                                     <button 
-                                                        onClick={() => handleSaveGame(game)}
-                                                        disabled={isSaved}
-                                                        className={`p-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-bold ${isSaved ? 'bg-slate-700 text-emerald-500 cursor-default' : 'bg-slate-700 hover:bg-slate-600 text-white active:scale-95'}`}
+                                                        onClick={handleGenerate}
+                                                        disabled={!stats || isGenerating}
+                                                        className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/50 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                                                     >
-                                                        {isSaved ? <><CheckCircle2 size={16}/> Salvo</> : <><BookmarkPlus size={16}/> Salvar</>}
+                                                        {isGenerating ? <RefreshCw className="animate-spin" size={20} /> : <Wand2 size={20} />}
+                                                        {isGenerating ? 'Calculando...' : 'Gerar 5 Combinações'}
                                                     </button>
                                                 </div>
-                                                <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-                                                    {game.numbers.map(n => <Ball key={n} n={n} />)}
-                                                </div>
                                             </div>
-                                        )})
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* CONTEÚDO: SALVOS */}
-                        {activeTab === 'saved' && (
-                            <div className="space-y-6 animate-in fade-in">
-                                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-md">
-                                    <h2 className="font-bold text-white flex items-center gap-2 text-lg">
-                                        <Save className="text-emerald-400" />
-                                        Meus Jogos Salvos <span className="bg-slate-700 px-2 py-0.5 rounded text-sm">{savedGames.length}</span>
-                                    </h2>
-                                    <div className="flex gap-3 w-full sm:w-auto">
-                                        <button 
-                                            onClick={copyToClipboard}
-                                            disabled={savedGames.length === 0}
-                                            className="flex-1 sm:flex-none text-sm bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                                        >
-                                            {copySuccess ? <CheckCircle2 size={16} className="text-emerald-400"/> : <Copy size={16} />} 
-                                            {copySuccess ? 'Copiado!' : 'Copiar'}
-                                        </button>
-                                        <button 
-                                            onClick={exportTxt}
-                                            disabled={savedGames.length === 0}
-                                            className="flex-1 sm:flex-none text-sm bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                                        >
-                                            <Download size={16} /> Exportar .TXT
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                    {savedGames.length === 0 && (
-                                        <div className="lg:col-span-2 text-center text-slate-500 py-16 bg-slate-800/50 rounded-xl border border-dashed border-slate-700">
-                                            <BookmarkPlus size={40} className="mx-auto mb-3 opacity-50" />
-                                            <p>Você ainda não salvou nenhum jogo.</p>
                                         </div>
-                                    )}
-                                    {savedGames.map((game, i) => {
-                                        // Verifica acertos baseados no último sorteio (se houver dados)
-                                        const lastResult = stats ? stats.lastDraw.Dezenas : [];
-                                        const hits = game.numbers.filter(n => lastResult.includes(n)).length;
-                                        
-                                        return (
-                                            <div key={game.id} className="bg-slate-800 p-5 rounded-xl border border-slate-700 relative group shadow-sm hover:shadow-md transition-shadow">
-                                                <button 
-                                                    onClick={() => setSavedGames(savedGames.filter(g => g.id !== game.id))}
-                                                    className="absolute top-4 right-4 text-slate-500 hover:text-red-400 hover:bg-red-400/10 transition-colors p-2 rounded-lg"
-                                                    title="Excluir Jogo"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                                
-                                                <div className="flex items-center gap-3 mb-4">
-                                                    <span className="text-xs font-bold text-slate-400 bg-slate-900 px-2 py-1 rounded">CARTÃO #{savedGames.length - i}</span>
-                                                    {stats && (
-                                                        <span className={`text-xs font-bold px-2 py-1 rounded ${hits >= 11 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-slate-700 text-slate-300'}`}>
-                                                            {hits} Acertos no Último Sorteio
-                                                        </span>
-                                                    )}
-                                                </div>
 
-                                                <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                                                    {game.numbers.map(n => (
-                                                        <Ball 
-                                                            key={n} 
-                                                            n={n} 
-                                                            size="sm" 
-                                                            highlight={stats && lastResult.includes(n)} 
-                                                        />
-                                                    ))}
-                                                </div>
+                                        {/* Resultados do Gerador */}
+                                        <div className="xl:col-span-2 space-y-4">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <h2 className="text-white font-bold text-lg">Jogos Gerados</h2>
+                                                {generatedGames.length > 0 && (
+                                                    <button onClick={() => setGeneratedGames([])} className="text-sm text-red-400 hover:text-red-300 transition-colors">Limpar Tela</button>
+                                                )}
                                             </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
 
-                        {/* CONTEÚDO: BASE DE DADOS */}
-                        {activeTab === 'data' && (
-                            <div className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700 shadow-xl animate-in fade-in">
-                                <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
-                                    <h2 className="font-bold text-white flex items-center gap-2">
-                                        <Database className="text-emerald-400" size={20} /> Histórico Recente
-                                    </h2>
-                                    <span className="text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded">{history.length} concursos carregados</span>
-                                </div>
-                                <div className="max-h-[600px] overflow-auto custom-scrollbar">
-                                    <table className="w-full text-left text-sm text-slate-300 border-collapse">
-                                        <thead className="bg-slate-900/80 text-slate-400 sticky top-0 z-10 backdrop-blur-sm">
-                                            <tr>
-                                                <th className="px-6 py-4 font-bold border-b border-slate-700 w-32">Concurso</th>
-                                                <th className="px-6 py-4 font-bold border-b border-slate-700">Dezenas Sorteadas</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-700/50">
-                                            {history.slice(0, 100).map((row) => (
-                                                <tr key={row.Concurso} className="hover:bg-slate-700/30 transition-colors">
-                                                    <td className="px-6 py-4 font-mono text-emerald-400 font-bold">#{row.Concurso}</td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex flex-wrap gap-1.5">
-                                                            {row.Dezenas.map(n => (
-                                                                <span key={n} className="inline-block w-7 h-7 text-center bg-slate-700 text-slate-200 rounded text-xs font-bold leading-7 shadow-sm border border-slate-600">
-                                                                    {n.toString().padStart(2, '0')}
+                                            {generatedGames.length === 0 ? (
+                                                <div className="border-2 border-dashed border-slate-700 bg-slate-800/50 rounded-2xl p-12 text-center text-slate-500 flex flex-col items-center justify-center">
+                                                    <Cpu size={48} className="mb-4 opacity-50 text-slate-400" />
+                                                    <p className="max-w-md">Ajuste os parâmetros no painel lateral e clique em gerar para criar combinações matematicamente otimizadas.</p>
+                                                </div>
+                                            ) : (
+                                                generatedGames.map((game, idx) => {
+                                                    const isSaved = savedGames.some(g => JSON.stringify(g.numbers) === JSON.stringify(game.numbers));
+                                                    
+                                                    return (
+                                                    <div key={game.id} className="bg-slate-800 rounded-xl p-5 border-l-4 border-emerald-500 shadow-lg animate-in slide-in-from-bottom-2 fade-in relative group">
+                                                        <div className="flex justify-between items-start mb-4">
+                                                            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                                                                <span className="bg-emerald-900/50 text-emerald-400 text-xs font-bold px-3 py-1.5 rounded w-fit">OPÇÃO {idx + 1}</span>
+                                                                <div className="text-xs text-slate-400 flex gap-3">
+                                                                    <span>Soma: <b className="text-white">{game.meta.sum}</b></span>
+                                                                    <span>Ímpares: <b className="text-white">{game.meta.odds}</b></span>
+                                                                    <span>Repetidas: <b className="text-white">{game.meta.repeats}</b></span>
+                                                                </div>
+                                                            </div>
+                                                            <button 
+                                                                onClick={() => handleSaveGame(game)}
+                                                                disabled={isSaved}
+                                                                className={`p-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-bold ${isSaved ? 'bg-slate-700 text-emerald-500 cursor-default' : 'bg-slate-700 hover:bg-slate-600 text-white active:scale-95'}`}
+                                                            >
+                                                                {isSaved ? <><CheckCircle2 size={16}/> Salvo</> : <><BookmarkPlus size={16}/> Salvar</>}
+                                                            </button>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                                                            {game.numbers.map(n => <Ball key={n} n={n} />)}
+                                                        </div>
+                                                    </div>
+                                                )})
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* CONTEÚDO: SALVOS */}
+                                {activeTab === 'saved' && (
+                                    <div className="space-y-6 animate-in fade-in">
+                                        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-md">
+                                            <h2 className="font-bold text-white flex items-center gap-2 text-lg">
+                                                <Save className="text-emerald-400" />
+                                                Meus Jogos Salvos <span className="bg-slate-700 px-2 py-0.5 rounded text-sm">{savedGames.length}</span>
+                                            </h2>
+                                            <div className="flex gap-3 w-full sm:w-auto">
+                                                <button 
+                                                    onClick={copyToClipboard}
+                                                    disabled={savedGames.length === 0}
+                                                    className="flex-1 sm:flex-none text-sm bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                                                >
+                                                    {copySuccess ? <CheckCircle2 size={16} className="text-emerald-400"/> : <Copy size={16} />} 
+                                                    {copySuccess ? 'Copiado!' : 'Copiar'}
+                                                </button>
+                                                <button 
+                                                    onClick={exportTxt}
+                                                    disabled={savedGames.length === 0}
+                                                    className="flex-1 sm:flex-none text-sm bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                                                >
+                                                    <Download size={16} /> Exportar .TXT
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                            {savedGames.length === 0 && (
+                                                <div className="lg:col-span-2 text-center text-slate-500 py-16 bg-slate-800/50 rounded-xl border border-dashed border-slate-700">
+                                                    <BookmarkPlus size={40} className="mx-auto mb-3 opacity-50" />
+                                                    <p>Você ainda não salvou nenhum jogo.</p>
+                                                </div>
+                                            )}
+                                            {savedGames.map((game, i) => {
+                                                const lastResult = stats ? stats.lastDraw.Dezenas : [];
+                                                const hits = game.numbers.filter(n => lastResult.includes(n)).length;
+                                                
+                                                return (
+                                                    <div key={game.id} className="bg-slate-800 p-5 rounded-xl border border-slate-700 relative group shadow-sm hover:shadow-md transition-shadow">
+                                                        <button 
+                                                            onClick={() => setSavedGames(savedGames.filter(g => g.id !== game.id))}
+                                                            className="absolute top-4 right-4 text-slate-500 hover:text-red-400 hover:bg-red-400/10 transition-colors p-2 rounded-lg"
+                                                            title="Excluir Jogo"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                        
+                                                        <div className="flex items-center gap-3 mb-4">
+                                                            <span className="text-xs font-bold text-slate-400 bg-slate-900 px-2 py-1 rounded">CARTÃO #{savedGames.length - i}</span>
+                                                            {stats && (
+                                                                <span className={`text-xs font-bold px-2 py-1 rounded ${hits >= 11 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-slate-700 text-slate-300'}`}>
+                                                                    {hits} Acertos no Último Sorteio
                                                                 </span>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                                                            {game.numbers.map(n => (
+                                                                <Ball 
+                                                                    key={n} 
+                                                                    n={n} 
+                                                                    size="sm" 
+                                                                    highlight={stats && lastResult.includes(n)} 
+                                                                />
                                                             ))}
                                                         </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* CONTEÚDO: BASE DE DADOS */}
+                                {activeTab === 'data' && (
+                                    <div className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700 shadow-xl animate-in fade-in">
+                                        <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+                                            <h2 className="font-bold text-white flex items-center gap-2">
+                                                <Database className="text-emerald-400" size={20} /> Histórico Recente
+                                            </h2>
+                                            <span className="text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded">{history.length} concursos carregados</span>
+                                        </div>
+                                        <div className="max-h-[600px] overflow-auto custom-scrollbar">
+                                            <table className="w-full text-left text-sm text-slate-300 border-collapse">
+                                                <thead className="bg-slate-900/80 text-slate-400 sticky top-0 z-10 backdrop-blur-sm">
+                                                    <tr>
+                                                        <th className="px-6 py-4 font-bold border-b border-slate-700 w-32">Concurso</th>
+                                                        <th className="px-6 py-4 font-bold border-b border-slate-700">Dezenas Sorteadas</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-700/50">
+                                                    {history.slice(0, 100).map((row) => (
+                                                        <tr key={row.Concurso} className="hover:bg-slate-700/30 transition-colors">
+                                                            <td className="px-6 py-4 font-mono text-emerald-400 font-bold">#{row.Concurso}</td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex flex-wrap gap-1.5">
+                                                                    {row.Dezenas.map(n => (
+                                                                        <span key={n} className="inline-block w-7 h-7 text-center bg-slate-700 text-slate-200 rounded text-xs font-bold leading-7 shadow-sm border border-slate-600">
+                                                                            {n.toString().padStart(2, '0')}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
                         )}
-                    </>
-                )}
-            </main>
-        </div>
-    );
-}
+                    </main>
+                </div>
+            );
+        }
+
+        // Renderiza o App
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<LotoFacilApp />);
+    </script>
+</body>
+</html>
