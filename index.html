@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LotoAnalítica Pro - Sistema Completo (Com Auto-Lucro)</title>
+    <title>LotoAnalítica Pro - Sistema Completo (Com Ciclos)</title>
     <!-- Bibliotecas Essenciais (React e Tailwind) -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -17,21 +17,15 @@
             theme: {
                 extend: {
                     colors: {
-                        slate: {
-                            850: '#151e2e',
-                        },
-                        emerald: {
-                            450: '#10b981', // Ajuste fino
-                        },
-                        violet: {
-                            600: '#7c3aed',
-                            500: '#8b5cf6',
-                        }
+                        slate: { 850: '#151e2e' },
+                        emerald: { 450: '#10b981' },
+                        violet: { 600: '#7c3aed', 500: '#8b5cf6' }
                     },
                     boxShadow: {
                         'neon-red': '0 0 5px rgba(239, 68, 68, 0.5), 0 0 10px rgba(239, 68, 68, 0.3)',
                         'neon-blue': '0 0 5px rgba(59, 130, 246, 0.5)',
                         'neon-purple': '0 0 5px rgba(139, 92, 246, 0.5), 0 0 10px rgba(139, 92, 246, 0.3)',
+                        'neon-amber': '0 0 5px rgba(245, 158, 11, 0.6), 0 0 10px rgba(245, 158, 11, 0.4)',
                     },
                     animation: {
                         'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
@@ -45,58 +39,23 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            margin: 0;
-            padding: 0;
-        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; }
         .animate-pulse-once { animation: pulse 0.5s ease-in-out 1; }
         @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
         
-        /* Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #64748b; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #475569; }
         
-        /* Glass Panel Adaptável (Claro/Escuro) */
-        .glass-panel {
-            backdrop-filter: blur(12px);
-            transition: background-color 0.3s, border-color 0.3s;
-        }
+        .glass-panel { backdrop-filter: blur(12px); transition: background-color 0.3s, border-color 0.3s; }
+        .dark .glass-panel { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .glass-panel { background: rgba(255, 255, 255, 0.8); border: 1px solid rgba(203, 213, 225, 0.6); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
         
-        /* Dark Mode Glass */
-        .dark .glass-panel {
-            background: rgba(30, 41, 59, 0.7);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.5); border-radius: 3px; }
 
-        /* Light Mode Glass */
-        .glass-panel {
-            background: rgba(255, 255, 255, 0.8);
-            border: 1px solid rgba(203, 213, 225, 0.6);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        }
-        
-        /* Custom Scrollbar for Table */
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background-color: rgba(156, 163, 175, 0.5);
-            border-radius: 3px;
-        }
-
-        /* Animação de Loading para Fechamento */
-        .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #10b981;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-        }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #10b981; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
@@ -106,7 +65,6 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
 
-        // --- ÍCONES (Lucide React equivalents) ---
         const Icons = {
             Dice5: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M16 8h.01"/><path d="M8 8h.01"/><path d="M8 16h.01"/><path d="M16 16h.01"/><path d="M12 12h.01"/></svg>,
             LayoutDashboard: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>,
@@ -134,17 +92,14 @@
             Lock: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
             Grid: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>,
             Wallet: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5"/><path d="M16 12h5"/><path d="M2 7h20"/><circle cx="18" cy="16" r="1"/></svg>,
-            CheckCircle2: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
+            CheckCircle2: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>,
+            RefreshCw: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>,
         };
 
         const Icon = ({ name, size = 20, className }) => {
             const SvgIcon = Icons[name];
             if (!SvgIcon) return <span className="text-xs">?</span>;
-            return (
-                <span className={`inline-flex items-center justify-center ${className || ''}`} style={{ width: size, height: size }}>
-                    <SvgIcon />
-                </span>
-            );
+            return <span className={`inline-flex items-center justify-center ${className || ''}`} style={{ width: size, height: size }}><SvgIcon /></span>;
         };
 
         const StatCard = ({ title, value, subtext, color = "blue" }) => {
@@ -157,16 +112,7 @@
                 cyan: "border-cyan-500 text-cyan-600 dark:text-cyan-400",
                 pink: "border-pink-500 text-pink-600 dark:text-pink-400"
             };
-
-            const subtextColors = {
-                blue: "text-blue-500",
-                emerald: "text-emerald-500",
-                red: "text-red-500",
-                purple: "text-purple-500",
-                amber: "text-amber-500",
-                cyan: "text-cyan-500",
-                pink: "text-pink-500"
-            };
+            const subtextColors = { blue: "text-blue-500", emerald: "text-emerald-500", red: "text-red-500", purple: "text-purple-500", amber: "text-amber-500", cyan: "text-cyan-500", pink: "text-pink-500" };
 
             return (
                 <div className={`glass-panel p-4 rounded-xl border-l-4 ${colors[color].split(' ')[0]} shadow-lg relative overflow-hidden group`}>
@@ -175,7 +121,6 @@
                         <div className="text-3xl font-bold mt-1 text-slate-800 dark:text-white tracking-tight">{value}</div>
                         {subtext && <div className={`text-xs mt-1 ${subtextColors[color]}`}>{subtext}</div>}
                     </div>
-                    {/* Background decoration */}
                     <div className={`absolute -right-4 -bottom-4 opacity-10 ${subtextColors[color]} group-hover:scale-110 transition-transform duration-300`}>
                         <Icon name="BarChart2" size={80} />
                     </div>
@@ -183,7 +128,7 @@
             );
         };
 
-        const Ball = ({ n, selected, onClick, size = "md", isHot, isCold, extraClass = "" }) => {
+        const Ball = ({ n, selected, onClick, size = "md", isHot, isCold, isCycleMissing, extraClass = "" }) => {
             let classes = ["flex items-center justify-center rounded-full transition-all duration-300 border"];
             
             if (onClick) classes.push("cursor-pointer hover:scale-110");
@@ -195,17 +140,17 @@
             if (selected) {
                 classes.push("bg-gradient-to-br from-emerald-500 to-emerald-700 text-white");
                 
-                if (isHot) {
-                    classes.push("border-red-500 shadow-neon-red ring-2 ring-red-500/50 z-10"); 
-                } else if (isCold) {
-                    classes.push("border-blue-400 shadow-neon-blue ring-2 ring-blue-400/50 z-10"); 
-                } else {
-                    classes.push("border-emerald-400 shadow-emerald-900/50 shadow-lg"); 
-                }
+                if (isHot) classes.push("border-red-500 shadow-neon-red ring-2 ring-red-500/50 z-10"); 
+                else if (isCold) classes.push("border-blue-400 shadow-neon-blue ring-2 ring-blue-400/50 z-10"); 
+                else classes.push("border-emerald-400 shadow-emerald-900/50 shadow-lg"); 
             } else {
                 classes.push("bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600");
                 
-                if (isHot) {
+                // Prioridade de visualização: Se falta no ciclo, fica laranja. Se não, mostra se é quente/frio.
+                if (isCycleMissing) {
+                    classes.push("text-amber-600 dark:text-amber-400 font-extrabold border-amber-500 shadow-neon-amber ring-1 ring-amber-400/30 z-10");
+                }
+                else if (isHot) {
                     classes.push("text-red-500 font-extrabold border-red-500 shadow-neon-red ring-1 ring-red-400/30");
                 } else if (isCold) {
                     classes.push("text-blue-500 font-bold border-blue-400 shadow-neon-blue ring-1 ring-blue-400/30");
@@ -215,19 +160,18 @@
             }
 
             return (
-                <div 
-                    onClick={() => onClick && onClick(n)}
-                    className={`${classes.join(" ")} ${extraClass}`}
-                >
+                <div onClick={() => onClick && onClick(n)} className={`${classes.join(" ")} ${extraClass}`}>
                     {n.toString().padStart(2, '0')}
                 </div>
             );
         };
 
-        const MiniBall = ({ n, isHot, isCold }) => {
+        const MiniBall = ({ n, isHot, isCold, isCycleMissing }) => {
              let miniClass = "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600";
              
-             if (isHot) {
+             if (isCycleMissing) {
+                 miniClass = "bg-amber-50 dark:bg-slate-800 text-amber-500 border-amber-400 font-extrabold shadow-[0_0_5px_rgba(245,158,11,0.4)]";
+             } else if (isHot) {
                  miniClass = "bg-red-50 dark:bg-slate-800 text-red-500 border-red-400 font-extrabold shadow-[0_0_5px_rgba(239,68,68,0.4)]";
              } else if (isCold) {
                  miniClass = "bg-blue-50 dark:bg-slate-800 text-blue-500 border-blue-400 font-bold";
@@ -251,14 +195,9 @@
         const getCombinations = (arr, k) => {
             const result = [];
             function backtrack(start, combo) {
-                if (combo.length === k) {
-                    result.push([...combo]);
-                    return;
-                }
+                if (combo.length === k) { result.push([...combo]); return; }
                 for (let i = start; i < arr.length; i++) {
-                    combo.push(arr[i]);
-                    backtrack(i + 1, combo);
-                    combo.pop();
+                    combo.push(arr[i]); backtrack(i + 1, combo); combo.pop();
                 }
             }
             backtrack(0, []);
@@ -268,10 +207,8 @@
         const generateOptimizedClosure = (selectedNumbers, strategy) => {
             const K = 15;
             const { guarantee, condition } = strategy;
-            
             const scenarios = getCombinations(selectedNumbers, condition);
             const potentialGames = getCombinations(selectedNumbers, K);
-
             const finalGames = [];
             let uncoveredScenarios = [...scenarios];
 
@@ -283,7 +220,6 @@
                 for (let i = 0; i < potentialGames.length; i++) {
                     const game = potentialGames[i];
                     let currentCoveredIndices = [];
-                    
                     for (let j = 0; j < uncoveredScenarios.length; j++) {
                         const scenario = uncoveredScenarios[j];
                         let matchCount = 0;
@@ -293,10 +229,7 @@
                             else if (game[p1] < scenario[p2]) { p1++; }
                             else { p2++; }
                         }
-
-                        if (matchCount >= guarantee) {
-                            currentCoveredIndices.push(j);
-                        }
+                        if (matchCount >= guarantee) currentCoveredIndices.push(j);
                     }
 
                     if (currentCoveredIndices.length > bestCoveredCount) {
@@ -314,66 +247,34 @@
                         if(!coveredSet.has(k)) newUncovered.push(uncoveredScenarios[k]);
                     }
                     uncoveredScenarios = newUncovered;
-                    
                     const gameIdx = potentialGames.indexOf(bestGame);
                     if(gameIdx > -1) potentialGames.splice(gameIdx, 1);
-                } else {
-                    break; 
-                }
+                } else { break; }
             }
             return finalGames;
         };
 
         function App() {
-            const [theme, setTheme] = useState(() => {
-                try { return localStorage.getItem('loto_theme') || 'dark'; } 
-                catch(e) { return 'dark'; }
-            });
-
-            const toggleTheme = () => {
-                const newTheme = theme === 'dark' ? 'light' : 'dark';
-                setTheme(newTheme);
-                localStorage.setItem('loto_theme', newTheme);
-            };
-
+            const [theme, setTheme] = useState(() => { try { return localStorage.getItem('loto_theme') || 'dark'; } catch(e) { return 'dark'; } });
+            const toggleTheme = () => { const newTheme = theme === 'dark' ? 'light' : 'dark'; setTheme(newTheme); localStorage.setItem('loto_theme', newTheme); };
             const [activeTab, setActiveTab] = useState('dashboard');
             
             const [fullHistory, setFullHistory] = useState(() => {
-                try {
-                    const saved = localStorage.getItem('loto_full_history_v2');
-                    return saved ? JSON.parse(saved) : [];
-                } catch(e) { return []; }
+                try { const saved = localStorage.getItem('loto_full_history_v2'); return saved ? JSON.parse(saved) : []; } catch(e) { return []; }
             });
-
             const [scopeSize, setScopeSize] = useState('all'); 
-
             const activeHistory = useMemo(() => {
                 if (scopeSize === 'all') return fullHistory;
-                const limit = parseInt(scopeSize);
-                return fullHistory.slice(0, limit);
+                return fullHistory.slice(0, parseInt(scopeSize));
             }, [fullHistory, scopeSize]);
 
             const [isFileLoaded, setIsFileLoaded] = useState(fullHistory.length > 0);
             const [error, setError] = useState(null);
             
-            const [genFilters, setGenFilters] = useState({
-                oddTarget: 8, 
-                sumMin: 180,
-                sumMax: 220,
-                repeatsTarget: 9, 
-                fixedNumbers: [],
-                excludeNumbers: []
-            });
+            const [genFilters, setGenFilters] = useState({ oddTarget: 8, sumMin: 180, sumMax: 220, repeatsTarget: 9, fixedNumbers: [], excludeNumbers: [] });
             const [generatedGames, setGeneratedGames] = useState([]);
-            const [savedGames, setSavedGames] = useState(() => {
-                try {
-                    const saved = localStorage.getItem('loto_saved_games');
-                    return saved ? JSON.parse(saved) : [];
-                } catch (e) { return []; }
-            });
-
+            const [savedGames, setSavedGames] = useState(() => { try { const saved = localStorage.getItem('loto_saved_games'); return saved ? JSON.parse(saved) : []; } catch (e) { return []; } });
             const [manualSelection, setManualSelection] = useState([]);
-            
             const [closureStrategy, setClosureStrategy] = useState(CLOSURE_STRATEGIES[0]);
             const [closureSelection, setClosureSelection] = useState([]);
             const [closureResult, setClosureResult] = useState(null);
@@ -384,117 +285,138 @@
             const fileInputRef = useRef(null);
 
             useEffect(() => {
-                if (fullHistory.length > 0) {
-                    try {
-                        localStorage.setItem('loto_full_history_v2', JSON.stringify(fullHistory));
-                    } catch(e) { console.warn("Storage cheio"); }
+                if (fullHistory.length > 0) { try { localStorage.setItem('loto_full_history_v2', JSON.stringify(fullHistory)); } catch(e) {} }
+            }, [fullHistory]);
+            useEffect(() => { localStorage.setItem('loto_saved_games', JSON.stringify(savedGames)); }, [savedGames]);
+
+            // --- LÓGICA DO CICLO DAS DEZENAS ---
+            const cycleData = useMemo(() => {
+                if (!fullHistory || fullHistory.length === 0) return null;
+                
+                let currentOpenCycleDraws = [];
+                let tempSet = new Set();
+                
+                // Vai do mais recente (0) para o mais antigo, tentando achar o corte do ciclo
+                for (let i = 0; i < fullHistory.length; i++) {
+                    let draw = fullHistory[i];
+                    let newNums = 0;
+                    draw.Dezenas.forEach(n => { if (!tempSet.has(n)) newNums++; });
+
+                    // Se adicionar as dezenas deste sorteio fechar os 25, 
+                    // significa que este sorteio no passado FOI o último de um ciclo fechado.
+                    // O ciclo ATUAL (aberto) são apenas os jogos DEPOIS dele (ou seja, de 0 até i-1).
+                    if (tempSet.size + newNums === 25) {
+                        currentOpenCycleDraws = fullHistory.slice(0, i);
+                        break;
+                    } else {
+                        draw.Dezenas.forEach(n => tempSet.add(n));
+                    }
                 }
+
+                // Extrai as que saíram e as que faltam no ciclo ABERTO
+                let drawnInOpenCycle = new Set();
+                currentOpenCycleDraws.forEach(d => d.Dezenas.forEach(n => drawnInOpenCycle.add(n)));
+                
+                let missing = [];
+                for (let n = 1; n <= 25; n++) {
+                    if (!drawnInOpenCycle.has(n)) missing.push(n);
+                }
+
+                return {
+                    drawsCount: currentOpenCycleDraws.length,
+                    missingNumbers: missing,
+                    missingSet: new Set(missing)
+                };
             }, [fullHistory]);
 
-            useEffect(() => {
-                localStorage.setItem('loto_saved_games', JSON.stringify(savedGames));
-            }, [savedGames]);
-
-            // --- CORREÇÃO DO PARSER AQUI ---
+            // --- O PARSER BLINDADO (RESOLVE O PROBLEMA DO ARQUIVO DA CAIXA) ---
             const handleFileUpload = (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
 
-                const reader = new FileReader();
-                const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.htm');
-
-                const processData = (data) => {
-                    if (data.length > 0) {
-                        data.sort((a, b) => b.Concurso - a.Concurso);
-                        setFullHistory(data);
+                const processData = (parsed) => {
+                    if (parsed.length > 0) {
+                        parsed.sort((a, b) => b.Concurso - a.Concurso);
+                        setFullHistory(parsed);
                         setIsFileLoaded(true);
                         setError(null);
                         setActiveTab('dashboard');
                     } else {
-                        setError("Nenhum dado válido encontrado. Verifique o arquivo da Caixa.");
+                        setError("O arquivo não parece conter resultados válidos da Lotofácil. Certifique-se de baixar do site da Caixa.");
                     }
                 };
 
-                if (isExcel) {
-                    reader.onload = (e) => {
-                        try {
-                            const data = new Uint8Array(e.target.result);
-                            const workbook = XLSX.read(data, {type: 'array'});
-                            let sheetName = workbook.SheetNames.find(n => n.toUpperCase().includes('LOTOFÁCIL')) || workbook.SheetNames[0];
-                            const worksheet = workbook.Sheets[sheetName];
+                // Função de Força Bruta para extrair resultados de HTML puro
+                const parseHTMLTableString = (htmlString) => {
+                    const doc = new DOMParser().parseFromString(htmlString, 'text/html');
+                    const rows = doc.querySelectorAll('tr');
+                    const parsed = [];
+                    
+                    rows.forEach(row => {
+                        const cells = row.querySelectorAll('td, th');
+                        const vals = Array.from(cells).map(c => c.textContent.trim());
+                        
+                        const concurso = parseInt(vals[0]);
+                        if(isNaN(concurso) || concurso <= 0) return;
+                        
+                        const nums = vals.map(v => parseInt(v)).filter(n => !isNaN(n) && n >= 1 && n <= 25);
+                        const uniqueNums = [...new Set(nums)];
+                        
+                        let dezenas = [];
+                        let sliced = vals.slice(2, 17).map(v => parseInt(v)).filter(n => !isNaN(n) && n>=1 && n<=25);
+                        
+                        if ([...new Set(sliced)].length === 15) dezenas = sliced;
+                        else if (uniqueNums.length >= 15) dezenas = uniqueNums.slice(-15);
+                        
+                        if(dezenas.length === 15) {
+                            parsed.push({ Concurso: concurso, Data: vals[1] || '', Dezenas: dezenas.sort((a,b)=>a-b) });
+                        }
+                    });
+                    return parsed;
+                };
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const buffer = e.target.result;
+                    let parsed = [];
+                    
+                    try {
+                        const workbook = XLSX.read(buffer, {type: 'array'});
+                        let sheetName = workbook.SheetNames.find(n => n.toUpperCase().includes('LOTOFÁCIL')) || workbook.SheetNames[0];
+                        const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
+
+                        rawData.forEach(row => {
+                            if (!Array.isArray(row)) return;
+                            const concurso = parseInt(row[0]);
+                            if (isNaN(concurso) || concurso <= 0) return;
+
+                            const nums = row.map(v => parseInt(v)).filter(n => !isNaN(n) && n >= 1 && n <= 25);
+                            let slicedNums = row.slice(2, 17).map(v => parseInt(v)).filter(n => !isNaN(n) && n >= 1 && n <= 25);
                             
-                            // Lendo a planilha de forma crua (Matriz) para fugir das alterações de cabeçalho da Caixa
-                            const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                            const parsed = [];
+                            let dezenas = [];
+                            if ([...new Set(slicedNums)].length === 15) dezenas = [...new Set(slicedNums)];
+                            else if ([...new Set(nums)].length >= 15) dezenas = [...new Set(nums)].slice(-15);
 
-                            rawData.forEach(row => {
-                                if (!Array.isArray(row)) return;
-
-                                // Verifica se a primeira coluna parece ser um Concurso válido
-                                const concurso = parseInt(row[0]);
-                                if (isNaN(concurso) || concurso <= 0) return;
-
-                                // Puxa todos os números de 1 a 25 encontrados na linha
-                                const nums = row.map(v => parseInt(v)).filter(n => !isNaN(n) && n >= 1 && n <= 25);
-                                const uniqueNums = [...new Set(nums)];
-
-                                let dezenas = [];
-                                
-                                // Estrutura oficial atual: Bolas estão nas colunas 2 a 16 (índices 2 a 16)
-                                let slicedNums = row.slice(2, 17).map(v => parseInt(v)).filter(n => !isNaN(n) && n >= 1 && n <= 25);
-                                slicedNums = [...new Set(slicedNums)];
-
-                                if (slicedNums.length === 15) {
-                                    dezenas = slicedNums; // Achou exatamente as bolas nas colunas certas
-                                } else if (uniqueNums.length >= 15) {
-                                    // Backup: Pega os últimos 15 números válidos caso haja colunas extras de data
-                                    dezenas = uniqueNums.slice(-15);
-                                }
-
-                                if (dezenas.length === 15) {
-                                    parsed.push({
-                                        Concurso: concurso,
-                                        Data: row[1] || '',
-                                        Dezenas: dezenas.sort((a,b) => a-b)
-                                    });
-                                }
-                            });
-                            
-                            processData(parsed);
-                        } catch (err) { setError("Erro ao processar arquivo: " + err.message); }
-                    };
-                    reader.readAsArrayBuffer(file);
-                } else {
-                    reader.onload = (e) => {
-                        try {
-                            const text = e.target.result;
-                            const lines = text.split('\n');
-                            const results = [];
-                            for (let i = 1; i < lines.length; i++) {
-                                const line = lines[i].trim();
-                                if (!line) continue;
-                                const cols = line.split(/[;,]/);
-                                if (cols.length > 15) {
-                                    const dezenas = [];
-                                    for(let j=2; j<cols.length; j++) {
-                                        const n = parseInt(cols[j]);
-                                        if(!isNaN(n) && n <= 25) dezenas.push(n);
-                                    }
-                                    const validDezenas = dezenas.slice(0, 15).sort((a,b)=>a-b);
-                                    if (validDezenas.length === 15) {
-                                        results.push({
-                                            Concurso: parseInt(cols[0]),
-                                            Data: cols[1],
-                                            Dezenas: validDezenas
-                                        });
-                                    }
-                                }
+                            if (dezenas.length === 15) {
+                                parsed.push({ Concurso: concurso, Data: row[1] || '', Dezenas: dezenas.sort((a,b) => a-b) });
                             }
-                            processData(results);
-                        } catch (err) { setError("Erro CSV: " + err.message); }
-                    };
-                    reader.readAsText(file);
-                }
+                        });
+                    } catch (err) { console.warn("XLSX parsing failed. Trying brute-force text parsing."); }
+
+                    // Se o XLSX falhou porque era um HTML falso da Caixa, roda a força bruta:
+                    if (parsed.length === 0) {
+                        try {
+                            const decoder = new TextDecoder("windows-1252"); // Caixa usa padrão windows
+                            const textString = decoder.decode(buffer);
+                            parsed = parseHTMLTableString(textString);
+                        } catch(err2) {
+                            console.error("Text fallback failed too.");
+                        }
+                    }
+
+                    processData(parsed);
+                };
+                reader.readAsArrayBuffer(file);
             };
 
             const resetData = () => {
@@ -510,66 +432,41 @@
                 if (!activeHistory.length) return null;
 
                 const freqs = Array(25).fill(0);
-                let totalSum = 0;
-                let totalOdds = 0;
+                let totalSum = 0; let totalOdds = 0;
                 
                 activeHistory.forEach(draw => {
-                    let drawSum = 0;
-                    let drawOdds = 0;
+                    let drawSum = 0; let drawOdds = 0;
                     draw.Dezenas.forEach(n => {
                         if (n >= 1 && n <= 25) freqs[n-1]++;
                         if (n % 2 !== 0) drawOdds++;
                         drawSum += n;
                     });
-                    totalSum += drawSum;
-                    totalOdds += drawOdds;
+                    totalSum += drawSum; totalOdds += drawOdds;
                 });
 
                 const totalDraws = activeHistory.length;
-                
-                const freqDetails = freqs.map((count, i) => ({
-                    n: i + 1,
-                    count,
-                    percent: ((count / totalDraws) * 100).toFixed(1)
-                }));
-
+                const freqDetails = freqs.map((count, i) => ({ n: i + 1, count, percent: ((count / totalDraws) * 100).toFixed(1) }));
                 const sortedFreq = [...freqDetails].sort((a, b) => b.count - a.count);
 
                 const topCount = 8;
-                
                 const hotNumbersList = sortedFreq.slice(0, topCount);
                 const coldNumbersList = sortedFreq.slice(-topCount).reverse(); 
                 
-                const hotSet = new Set(hotNumbersList.map(i => i.n));
-                const coldSet = new Set(coldNumbersList.map(i => i.n));
-
                 return {
-                    totalDraws,
-                    lastDraw: fullHistory[0], 
-                    avgSum: Math.round(totalSum / totalDraws),
-                    avgOdds: Math.round(totalOdds / totalDraws),
-                    hotNumbersList, 
-                    coldNumbersList, 
-                    hotSet, 
-                    coldSet, 
-                    frequencies: freqDetails,
-                    sortedFrequencies: sortedFreq
+                    totalDraws, lastDraw: fullHistory[0], avgSum: Math.round(totalSum / totalDraws), avgOdds: Math.round(totalOdds / totalDraws),
+                    hotNumbersList, coldNumbersList, hotSet: new Set(hotNumbersList.map(i => i.n)), coldSet: new Set(coldNumbersList.map(i => i.n)),
+                    frequencies: freqDetails, sortedFrequencies: sortedFreq
                 };
             }, [activeHistory, fullHistory]);
 
             const generateGame = () => {
                 const { oddTarget, sumMin, sumMax, repeatsTarget } = genFilters;
                 const lastDrawSet = new Set(fullHistory[0]?.Dezenas || []);
-                
-                let attempts = 0;
-                const maxAttempts = 10000; 
+                let attempts = 0; const maxAttempts = 10000; 
                 
                 while (attempts < maxAttempts) {
                     attempts++;
-                    const allNums = Array.from({length: 25}, (_, i) => i + 1);
-                    const shuffled = allNums.sort(() => 0.5 - Math.random());
-                    const candidate = shuffled.slice(0, 15).sort((a,b) => a-b);
-
+                    const candidate = Array.from({length: 25}, (_, i) => i + 1).sort(() => 0.5 - Math.random()).slice(0, 15).sort((a,b) => a-b);
                     const sum = candidate.reduce((a, b) => a + b, 0);
                     if (sum < sumMin || sum > sumMax) continue;
 
@@ -581,13 +478,7 @@
                         if (Math.abs(repeats - repeatsTarget) > 1 && repeatsTarget !== 0) continue;
                     }
 
-                    const newGame = {
-                        id: Date.now(),
-                        numbers: candidate,
-                        meta: { sum, odds, repeats: candidate.filter(n => lastDrawSet.has(n)).length }
-                    };
-                    
-                    setGeneratedGames(prev => [newGame, ...prev].slice(0, 50)); 
+                    setGeneratedGames(prev => [{ id: Date.now(), numbers: candidate, meta: { sum, odds, repeats: candidate.filter(n => lastDrawSet.has(n)).length } }, ...prev].slice(0, 50)); 
                     return;
                 }
                 alert("Não foi possível gerar com estes filtros restritos. Tente abrir mais as margens.");
@@ -595,81 +486,70 @@
 
             const checkPerformance = (numbers) => {
                 if (!activeHistory.length) return { maxHits: 0, hitsDistribution: {} };
-                
-                let maxHits = 0;
-                const hitsDist = { 11:0, 12:0, 13:0, 14:0, 15:0 };
-
+                let maxHits = 0; const hitsDist = { 11:0, 12:0, 13:0, 14:0, 15:0 };
                 activeHistory.forEach(draw => {
                     const hits = numbers.filter(n => draw.Dezenas.includes(n)).length;
                     if (hits > maxHits) maxHits = hits;
                     if (hits >= 11) hitsDist[hits]++;
                 });
-
                 return { maxHits, hitsDist };
             };
 
             const toggleManualNumber = (n) => {
-                if (manualSelection.includes(n)) {
-                    setManualSelection(manualSelection.filter(x => x !== n));
-                } else {
+                if (manualSelection.includes(n)) setManualSelection(manualSelection.filter(x => x !== n));
+                else {
                     if (manualSelection.length >= 20) return alert("Máximo de 20 números para análise.");
                     setManualSelection([...manualSelection, n].sort((a,b) => a-b));
                 }
             };
 
             const toggleClosureNumber = (n) => {
-                if (closureSelection.includes(n)) {
-                    setClosureSelection(closureSelection.filter(x => x !== n));
-                } else {
+                if (closureSelection.includes(n)) setClosureSelection(closureSelection.filter(x => x !== n));
+                else {
                     if (closureSelection.length >= closureStrategy.numbers) return alert(`Limite de ${closureStrategy.numbers} números atingido para este fechamento.`);
                     setClosureSelection([...closureSelection, n].sort((a,b) => a-b));
                 }
             };
 
-            const handleAutoFindProfit = async () => {
-                if (!activeHistory || activeHistory.length === 0) {
-                    alert("Carregue dados primeiro.");
-                    return;
+            // Nova função de suporte
+            const addMissingCycleToSelection = (setterFunction, currentSelection, limit) => {
+                if (!cycleData || cycleData.missingNumbers.length === 0) {
+                    return alert("O ciclo atual acabou de fechar! Nenhuma dezena pendente.");
                 }
+                let newSelection = [...currentSelection];
+                let added = 0;
+                cycleData.missingNumbers.forEach(n => {
+                    if (!newSelection.includes(n) && newSelection.length < limit) {
+                        newSelection.push(n);
+                        added++;
+                    }
+                });
+                setterFunction(newSelection.sort((a,b) => a-b));
+                if (added === 0 && newSelection.length >= limit) alert("Sua cartela já está cheia!");
+            };
 
-                setIsSearchingProfit(true);
-                setClosureResult(null); 
-                setClosureSimStats(null);
-
+            const handleAutoFindProfit = async () => {
+                if (!activeHistory || activeHistory.length === 0) return alert("Carregue dados primeiro.");
+                setIsSearchingProfit(true); setClosureResult(null); setClosureSimStats(null);
                 await new Promise(resolve => setTimeout(resolve, 50));
 
-                const maxAttempts = 300; 
-                let foundCombination = null;
-                const gamePrice = 3.0;
-                const prizeValues = { 11: 6, 12: 12, 13: 30, 14: 1500, 15: 1500000 };
-                const numbersNeeded = closureStrategy.numbers;
-
+                const maxAttempts = 300; let foundCombination = null;
+                const gamePrice = 3.0; const prizeValues = { 11: 6, 12: 12, 13: 30, 14: 1500, 15: 1500000 };
+                
                 for (let i = 0; i < maxAttempts; i++) {
-                    const allNums = Array.from({length: 25}, (_, i) => i + 1);
-                    const candidate = allNums.sort(() => 0.5 - Math.random())
-                                            .slice(0, numbersNeeded)
-                                            .sort((a,b) => a-b);
-                    
+                    const candidate = Array.from({length: 25}, (_, i) => i + 1).sort(() => 0.5 - Math.random()).slice(0, closureStrategy.numbers).sort((a,b) => a-b);
                     const games = generateOptimizedClosure(candidate, closureStrategy);
-                    
                     let totalCost = games.length * gamePrice * activeHistory.length; 
                     let totalPrizes = 0;
 
                     for (let d = 0; d < activeHistory.length; d++) {
-                        const draw = activeHistory[d];
                         for (let g = 0; g < games.length; g++) {
-                            const hits = games[g].filter(n => draw.Dezenas.includes(n)).length;
+                            const hits = games[g].filter(n => activeHistory[d].Dezenas.includes(n)).length;
                             if (hits >= 11) totalPrizes += prizeValues[hits];
                         }
                     }
 
-                    const profit = totalPrizes - totalCost;
-
-                    if (profit > 0) {
-                        foundCombination = candidate;
-                        break;
-                    }
-
+                    if (totalPrizes - totalCost > 0) { foundCombination = candidate; break; }
                     if (i % 20 === 0) await new Promise(r => setTimeout(r, 0));
                 }
 
@@ -677,99 +557,71 @@
                     setClosureSelection(foundCombination);
                     executeClosureGeneration(foundCombination);
                 } else {
-                    alert(`Não encontrei lucro positivo em ${maxAttempts} tentativas aleatórias para o filtro atual de ${activeHistory.length} concursos. Tente diminuir a quantidade de jogos analisados (Filtro 'Analisar').`);
+                    alert(`Não encontrei lucro positivo em ${maxAttempts} tentativas. Tente diminuir o Filtro Analisar.`);
                     setIsSearchingProfit(false);
                 }
             };
 
             const executeClosureGeneration = (selectionToUse) => {
                 const selection = selectionToUse || closureSelection;
-                
-                if (selection.length !== closureStrategy.numbers) {
-                    alert(`Selecione exatamente ${closureStrategy.numbers} números.`);
-                    setIsSearchingProfit(false);
-                    return;
-                }
+                if (selection.length !== closureStrategy.numbers) return alert(`Selecione exatamente ${closureStrategy.numbers} números.`);
                 
                 setIsGeneratingClosure(true);
-                
                 setTimeout(() => {
                     const games = generateOptimizedClosure(selection, closureStrategy);
-                    
-                    let totalCost = 0;
-                    let totalPrizes = 0;
+                    let totalCost = 0; let totalPrizes = 0;
                     let prizesBreakdown = { 11:0, 12:0, 13:0, 14:0, 15:0 };
-                    const gamePrice = 3.0;
                     const prizeValues = { 11: 6, 12: 12, 13: 30, 14: 1500, 15: 1500000 };
 
                     activeHistory.forEach(draw => {
-                        totalCost += (games.length * gamePrice);
+                        totalCost += (games.length * 3.0);
                         games.forEach(game => {
                             const hits = game.filter(n => draw.Dezenas.includes(n)).length;
-                            if (hits >= 11) {
-                                prizesBreakdown[hits]++;
-                                totalPrizes += prizeValues[hits];
-                            }
+                            if (hits >= 11) { prizesBreakdown[hits]++; totalPrizes += prizeValues[hits]; }
                         });
                     });
 
                     setClosureSimStats({
-                        totalCost,
-                        totalPrizes,
-                        profit: totalPrizes - totalCost,
-                        prizesBreakdown,
-                        roi: totalCost > 0 ? ((totalPrizes - totalCost) / totalCost) * 100 : 0
+                        totalCost, totalPrizes, profit: totalPrizes - totalCost,
+                        prizesBreakdown, roi: totalCost > 0 ? ((totalPrizes - totalCost) / totalCost) * 100 : 0
                     });
 
-                    setClosureResult(games);
-                    setIsGeneratingClosure(false);
-                    setIsSearchingProfit(false);
+                    setClosureResult(games); setIsGeneratingClosure(false); setIsSearchingProfit(false);
                 }, 100);
             };
-
-            const handleGenerateClosure = () => executeClosureGeneration(closureSelection);
 
             const saveClosureGames = () => {
                 if (!closureResult) return;
                 const newGames = closureResult.map(nums => ({
-                    id: Date.now() + Math.random(),
-                    numbers: nums,
+                    id: Date.now() + Math.random(), numbers: nums,
                     meta: { sum: nums.reduce((a,b)=>a+b,0), odds: nums.filter(n=>n%2!==0).length, repeats: 0, tag: "Fechamento" }
                 }));
                 setSavedGames([...savedGames, ...newGames]);
                 alert(`${newGames.length} jogos salvos com sucesso!`);
             };
 
-
             const manualAnalysis = useMemo(() => {
                 if (manualSelection.length < 15) return null;
-                const datasetToUse = activeHistory; 
-                
                 const hitsFull = { 11:0, 12:0, 13:0, 14:0, 15:0 };
                 let totalHitsSum = 0;
 
-                datasetToUse.forEach(draw => {
+                activeHistory.forEach(draw => {
                     const hits = manualSelection.filter(n => draw.Dezenas.includes(n)).length;
                     if (hits >= 11 && hits <= 15) hitsFull[hits]++;
                     totalHitsSum += hits;
                 });
-
-                const avgHits = (totalHitsSum / datasetToUse.length).toFixed(2);
 
                 const individualStats = manualSelection.map(n => {
                     const count = activeHistory.filter(d => d.Dezenas.includes(n)).length;
                     return { n, count, percent: ((count / activeHistory.length)*100).toFixed(0) };
                 });
 
-                const awardsLog = datasetToUse.map(draw => {
-                    const hits = manualSelection.filter(n => draw.Dezenas.includes(n)).length;
-                    return { ...draw, hits };
+                const awardsLog = activeHistory.map(draw => {
+                    return { ...draw, hits: manualSelection.filter(n => draw.Dezenas.includes(n)).length };
                 }).filter(d => d.hits >= 11).sort((a,b) => b.Concurso - a.Concurso);
 
-                return { hitsFull, avgHits, individualStats, awardsLog };
-
+                return { hitsFull, avgHits: (totalHitsSum / activeHistory.length).toFixed(2), individualStats, awardsLog };
             }, [manualSelection, activeHistory]); 
-
 
             if (!isFileLoaded) {
                 return (
@@ -779,22 +631,18 @@
                                 <div className="bg-emerald-500/20 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.2)]">
                                     <Icon name="Upload" size={40} className="text-emerald-500" />
                                 </div>
-                                
                                 <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-emerald-500 to-teal-400 bg-clip-text text-transparent">LotoAnalítica Pro</h1>
                                 <p className="text-slate-500 dark:text-gray-400 mb-8 text-sm leading-relaxed">
-                                    Importe sua planilha da Lotofácil (.xlsx, .xls ou .htm) para desbloquear inteligência estatística avançada.
+                                    Importe sua planilha da Lotofácil da Caixa para desbloquear inteligência estatística avançada.
                                 </p>
-
                                 <input type="file" accept=".csv,.xlsx,.xls,.htm,.html" onChange={handleFileUpload} ref={fileInputRef} className="hidden" />
-                                
                                 <button onClick={() => fileInputRef.current.click()} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30 group">
-                                    <Icon name="FileSpreadsheet" className="group-hover:scale-110 transition-transform" />
-                                    Carregar Planilha
+                                    <Icon name="FileSpreadsheet" className="group-hover:scale-110 transition-transform" /> Carregar Planilha
                                 </button>
-
                                 {error && (
-                                    <div className="mt-4 bg-red-100 dark:bg-red-900/30 border border-red-500/50 p-3 rounded text-sm text-red-600 dark:text-red-200 flex items-center gap-2 justify-center animate-pulse-once">
-                                        <Icon name="AlertTriangle" size={16} /> {error}
+                                    <div className="mt-4 bg-red-100 dark:bg-red-900/30 border border-red-500/50 p-3 rounded text-sm text-red-600 dark:text-red-200 flex flex-col items-center gap-2 justify-center animate-pulse-once">
+                                        <div className="flex items-center gap-2 font-bold"><Icon name="AlertTriangle" size={16} /> Erro de Leitura</div>
+                                        <p className="text-xs">{error}</p>
                                     </div>
                                 )}
                             </div>
@@ -819,37 +667,21 @@
                                                 <p className="text-[10px] text-slate-400 dark:text-gray-400 uppercase tracking-widest">Sistema Offline Inteligente</p>
                                             </div>
                                         </div>
-                                        <button onClick={toggleTheme} className="md:hidden p-2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-yellow-400">
-                                            {theme === 'dark' ? <Icon name="Sun" size={18} /> : <Icon name="Moon" size={18} />}
-                                        </button>
                                     </div>
                                     
                                     <div className="flex items-center gap-3">
-                                        <button onClick={toggleTheme} className="hidden md:flex p-2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-yellow-400 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
+                                        <button onClick={toggleTheme} className="p-2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-yellow-400 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
                                             {theme === 'dark' ? <Icon name="Sun" size={18} /> : <Icon name="Moon" size={18} />}
                                         </button>
-
                                         <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
                                             <div className="px-2 flex items-center gap-2 text-xs text-slate-500 dark:text-gray-400 uppercase font-bold tracking-wider">
                                                 <Icon name="Filter" size={14} />
                                                 <span className="hidden sm:inline">Analisar:</span>
                                             </div>
                                             <div className="flex bg-slate-100 dark:bg-slate-900 rounded-md p-1 gap-1">
-                                                {[
-                                                    {id: '10', label: '10'},
-                                                    {id: '50', label: '50'},
-                                                    {id: '100', label: '100'},
-                                                    {id: 'all', label: 'TODOS'}
-                                                ].map(opt => (
-                                                    <button
-                                                        key={opt.id}
-                                                        onClick={() => setScopeSize(opt.id)}
-                                                        className={`px-3 py-1 rounded text-xs font-bold transition-all ${
-                                                            scopeSize === opt.id 
-                                                            ? 'bg-emerald-500 text-white shadow' 
-                                                            : 'text-slate-500 dark:text-gray-500 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700'
-                                                        }`}
-                                                    >
+                                                {[{id: '10', label: '10'},{id: '50', label: '50'},{id: '100', label: '100'},{id: 'all', label: 'TODOS'}].map(opt => (
+                                                    <button key={opt.id} onClick={() => setScopeSize(opt.id)}
+                                                        className={`px-3 py-1 rounded text-xs font-bold transition-all ${scopeSize === opt.id ? 'bg-emerald-500 text-white shadow' : 'text-slate-500 dark:text-gray-500 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
                                                         {opt.label}
                                                     </button>
                                                 ))}
@@ -860,28 +692,13 @@
                             </div>
 
                             <div className="flex justify-center border-t border-slate-200 dark:border-slate-800 mt-2 bg-white/50 dark:bg-slate-900/50 overflow-x-auto">
-                                {[
-                                    { id: 'dashboard', label: 'Dashboard', icon: 'LayoutDashboard' },
-                                    { id: 'closure', label: 'Fechamentos Inteligentes', icon: 'Grid' }, 
-                                    { id: 'manual', label: 'Analisador Manual', icon: 'Edit3' },
-                                    { id: 'generator', label: 'Gerador IA', icon: 'Cpu' },
-                                    { id: 'saved', label: 'Jogos Salvos', icon: 'Save' },
-                                ].map(tab => (
-                                    <button
-                                        key={tab.id}
-                                        onClick={() => setActiveTab(tab.id)}
-                                        className={`
-                                            flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-all whitespace-nowrap
-                                            ${activeTab === tab.id 
-                                                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/5' 
-                                                : 'border-transparent text-slate-500 dark:text-gray-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'}
-                                        `}
-                                    >
-                                        <Icon name={tab.icon} size={16} />
-                                        <span className="hidden sm:inline">{tab.label}</span>
+                                {[ { id: 'dashboard', label: 'Dashboard', icon: 'LayoutDashboard' }, { id: 'closure', label: 'Fechamentos Inteligentes', icon: 'Grid' }, { id: 'manual', label: 'Analisador Manual', icon: 'Edit3' }, { id: 'generator', label: 'Gerador IA', icon: 'Cpu' }, { id: 'saved', label: 'Jogos Salvos', icon: 'Save' } ].map(tab => (
+                                    <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                                        className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${activeTab === tab.id ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/5' : 'border-transparent text-slate-500 dark:text-gray-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+                                        <Icon name={tab.icon} size={16} /> <span className="hidden sm:inline">{tab.label}</span>
                                     </button>
                                 ))}
-                                <button onClick={resetData} className="px-4 py-3 text-red-400/50 hover:text-red-500 ml-4 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-t transition-colors">
+                                <button onClick={resetData} className="px-4 py-3 text-red-400/50 hover:text-red-500 ml-4 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-t transition-colors" title="Carregar Novo Arquivo">
                                     <Icon name="XCircle" size={18} />
                                 </button>
                             </div>
@@ -891,11 +708,39 @@
                             
                             {activeTab === 'dashboard' && stats && (
                                 <div className="space-y-8 animate-pulse-once">
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                                         <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
                                             <Icon name="BarChart2" className="text-emerald-500" /> 
-                                            Visão Geral <span className="text-sm font-normal text-slate-500 dark:text-gray-500 ml-2">(Baseado nos últimos {stats.totalDraws} concursos)</span>
+                                            Visão Geral <span className="text-sm font-normal text-slate-500 dark:text-gray-500 ml-2">(Últimos {stats.totalDraws} concursos)</span>
                                         </h2>
+                                        
+                                        {/* NOVO: CARD DO CICLO NO DASHBOARD */}
+                                        {cycleData && (
+                                            <div className="bg-amber-100 dark:bg-amber-900/30 border border-amber-500/50 rounded-lg p-3 flex items-center gap-4 shadow-neon-amber">
+                                                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-bold">
+                                                    <Icon name="RefreshCw" size={20} />
+                                                    <div>
+                                                        <div className="text-sm">Ciclo Aberto</div>
+                                                        <div className="text-[10px] font-normal opacity-80">{cycleData.drawsCount} concursos até agora</div>
+                                                    </div>
+                                                </div>
+                                                <div className="h-8 w-px bg-amber-500/30"></div>
+                                                <div>
+                                                    <div className="text-xs text-amber-700 dark:text-amber-300 font-semibold mb-1">
+                                                        {cycleData.missingNumbers.length === 0 ? "O ciclo completou no último jogo!" : `Faltam ${cycleData.missingNumbers.length} para fechar o ciclo:`}
+                                                    </div>
+                                                    <div className="flex gap-1 flex-wrap max-w-[200px]">
+                                                        {cycleData.missingNumbers.length === 0 ? (
+                                                            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">Iniciando novo ciclo agora!</span>
+                                                        ) : (
+                                                            cycleData.missingNumbers.map(n => (
+                                                                <span key={n} className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">{n.toString().padStart(2,'0')}</span>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -914,35 +759,41 @@
                                                     <div className="border-t border-slate-500 dark:border-white w-full"></div>
                                                     <div className="border-t border-slate-500 dark:border-white w-full"></div>
                                                 </div>
-                                                
                                                 {stats.frequencies.map((item, idx) => {
                                                     const maxVal = Math.max(...stats.frequencies.map(f => f.count));
                                                     const height = (item.count / maxVal) * 100;
                                                     const isHot = stats.hotSet.has(item.n);
                                                     const isCold = stats.coldSet.has(item.n);
+                                                    const isCycleMissing = cycleData?.missingSet?.has(item.n);
                                                     
                                                     return (
                                                         <div key={idx} className="flex-1 flex flex-col items-center group relative h-full justify-end">
                                                             <div 
                                                                 className={`w-full rounded-t transition-all duration-500 relative
-                                                                    ${isHot ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 
+                                                                    ${isCycleMissing ? 'bg-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.8)]' : 
+                                                                    isHot ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 
                                                                     isCold ? 'bg-blue-400 dark:bg-blue-600' : 'bg-slate-300 dark:bg-slate-600'}
                                                                     hover:bg-slate-800 dark:hover:bg-white
                                                                 `}
                                                                 style={{ height: `${height}%` }}
                                                             >
-                                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-black text-white text-xs p-2 rounded whitespace-nowrap z-20 border border-slate-700 shadow-xl">
+                                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-black text-white text-xs p-2 rounded whitespace-nowrap z-20 border border-slate-700 shadow-xl text-center">
                                                                     <strong>Bola {item.n}</strong><br/>
-                                                                    {item.count} vezes<br/>
-                                                                    {item.percent}%
+                                                                    {item.count} vezes ({item.percent}%)<br/>
+                                                                    {isCycleMissing && <span className="text-amber-400 font-bold">Falta no Ciclo!</span>}
                                                                 </div>
                                                             </div>
-                                                            <span className={`text-[10px] mt-2 font-mono ${isHot ? 'text-red-500 dark:text-red-400 font-extrabold' : isCold ? 'text-blue-500 dark:text-blue-400 font-bold' : 'text-slate-400 dark:text-gray-500'}`}>
+                                                            <span className={`text-[10px] mt-2 font-mono ${isCycleMissing ? 'text-amber-500 font-bold' : isHot ? 'text-red-500 dark:text-red-400 font-extrabold' : isCold ? 'text-blue-500 dark:text-blue-400 font-bold' : 'text-slate-400 dark:text-gray-500'}`}>
                                                                 {item.n}
                                                             </span>
                                                         </div>
                                                     );
                                                 })}
+                                            </div>
+                                            <div className="flex gap-4 mt-4 text-[10px] text-slate-500 justify-center">
+                                                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-amber-400 rounded-sm"></div> Faltam no Ciclo</div>
+                                                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-500 rounded-sm"></div> Mais Quentes</div>
+                                                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-blue-400 rounded-sm"></div> Mais Frios</div>
                                             </div>
                                         </div>
 
@@ -972,53 +823,6 @@
                                             </div>
                                         </div>
                                     </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div className="glass-panel p-6 rounded-xl border-t-4 border-red-500 shadow-neon-red">
-                                            <div className="flex items-center gap-2 mb-6">
-                                                <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg text-red-500">
-                                                    <Icon name="Flame" size={24} />
-                                                </div>
-                                                <div>
-                                                    <h3 className="text-lg font-bold text-slate-800 dark:text-white">Números Quentes (Top 8)</h3>
-                                                    <p className="text-xs text-slate-500 dark:text-gray-400">Melhores dezenas do filtro atual. Aposte nestas!</p>
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
-                                                {stats.hotNumbersList.map((stat, i) => (
-                                                    <div key={stat.n} className="relative flex flex-col items-center p-2 rounded-lg bg-white dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 hover:border-red-500/50 transition-colors">
-                                                        <div className="w-10 h-10 mb-1 flex items-center justify-center rounded-full bg-white dark:bg-slate-800 text-red-500 font-extrabold border-2 border-red-500 shadow-neon-red">
-                                                            {stat.n}
-                                                        </div>
-                                                        <div className="text-xs font-bold text-slate-700 dark:text-slate-300">{stat.count}x</div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        <div className="glass-panel p-6 rounded-xl border-t-4 border-blue-500">
-                                            <div className="flex items-center gap-2 mb-6">
-                                                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-500">
-                                                    <Icon name="Snowflake" size={24} />
-                                                </div>
-                                                <div>
-                                                    <h3 className="text-lg font-bold text-slate-800 dark:text-white">Números Frios (Top 8)</h3>
-                                                    <p className="text-xs text-slate-500 dark:text-gray-400">Dezenas com menos saídas. Cuidado com elas.</p>
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
-                                                {stats.coldNumbersList.map((stat, i) => (
-                                                    <div key={stat.n} className="relative flex flex-col items-center p-2 rounded-lg bg-white dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 hover:border-blue-500/50 transition-colors">
-                                                        <div className="w-10 h-10 mb-1 flex items-center justify-center rounded-full bg-white dark:bg-slate-800 text-blue-500 font-bold border border-blue-400">
-                                                            {stat.n}
-                                                        </div>
-                                                        <div className="text-xs font-bold text-slate-700 dark:text-slate-300">{stat.count}x</div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-
                                 </div>
                             )}
 
@@ -1029,32 +833,19 @@
                                         <div className="glass-panel p-6 rounded-xl border border-emerald-500/30 h-fit">
                                             <div className="mb-6 border-b border-slate-200 dark:border-slate-700 pb-4">
                                                 <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2 mb-2">
-                                                    <Icon name="Lock" className="text-emerald-500" />
-                                                    Configurar Fechamento
+                                                    <Icon name="Lock" className="text-emerald-500" /> Configurar Fechamento
                                                 </h2>
-                                                <p className="text-xs text-slate-500 dark:text-gray-400">
-                                                    Escolha uma estratégia econômica para aumentar suas chances.
-                                                </p>
+                                                <p className="text-xs text-slate-500 dark:text-gray-400">Escolha uma estratégia econômica para aumentar suas chances.</p>
                                             </div>
 
                                             <div className="mb-6">
                                                 <label className="block text-xs font-bold text-slate-700 dark:text-gray-300 mb-2 uppercase">Estratégia de Redução</label>
-                                                <select 
-                                                    value={closureStrategy.id} 
-                                                    onChange={(e) => {
-                                                        const s = CLOSURE_STRATEGIES.find(x => x.id == e.target.value);
-                                                        setClosureStrategy(s);
-                                                        setClosureResult(null);
-                                                    }}
-                                                    className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white rounded-lg p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-                                                >
-                                                    {CLOSURE_STRATEGIES.map(s => (
-                                                        <option key={s.id} value={s.id}>{s.name}</option>
-                                                    ))}
+                                                <select value={closureStrategy.id} onChange={(e) => { setClosureStrategy(CLOSURE_STRATEGIES.find(x => x.id == e.target.value)); setClosureResult(null); }}
+                                                    className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white rounded-lg p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none">
+                                                    {CLOSURE_STRATEGIES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                                 </select>
                                                 <div className="mt-2 text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/20 p-2 rounded border border-emerald-500/20 flex gap-2 items-center">
-                                                    <Icon name="CheckCircle2" size={14} />
-                                                    <span>Gera aproximadamente <strong>{closureStrategy.estimatedGames} jogos</strong> (Economia Alta)</span>
+                                                    <Icon name="CheckCircle2" size={14} /> <span>Gera aproximadamente <strong>{closureStrategy.estimatedGames} jogos</strong></span>
                                                 </div>
                                             </div>
 
@@ -1067,64 +858,38 @@
                                                 </div>
                                                 <div className="grid grid-cols-5 gap-2 mb-4">
                                                     {Array.from({length: 25}, (_, i) => i + 1).map(n => (
-                                                        <Ball 
-                                                            key={n} 
-                                                            n={n} 
-                                                            size="sm"
-                                                            selected={closureSelection.includes(n)} 
-                                                            isHot={stats?.hotSet?.has(n)}
-                                                            isCold={stats?.coldSet?.has(n)}
-                                                            onClick={toggleClosureNumber} 
-                                                        />
+                                                        <Ball key={n} n={n} size="sm" selected={closureSelection.includes(n)} 
+                                                            isHot={stats?.hotSet?.has(n)} isCold={stats?.coldSet?.has(n)} isCycleMissing={cycleData?.missingSet?.has(n)}
+                                                            onClick={toggleClosureNumber} />
                                                     ))}
                                                 </div>
-                                                <div className="grid grid-cols-2 gap-2">
+                                                
+                                                {/* BOTÕES DE PREENCHIMENTO */}
+                                                <div className="grid grid-cols-2 gap-2 mb-2">
                                                     <button onClick={() => setClosureSelection([])} className="text-xs px-3 py-2 bg-slate-200 dark:bg-slate-700 rounded text-slate-600 dark:text-gray-300 hover:bg-slate-300 dark:hover:bg-slate-600">Limpar</button>
-                                                    <button 
-                                                        onClick={() => {
-                                                            const pool = stats.hotNumbersList.map(x => x.n); 
-                                                            const random = pool.sort(() => 0.5 - Math.random()).slice(0, closureStrategy.numbers).sort((a,b)=>a-b);
-                                                            setClosureSelection(random);
-                                                        }} 
-                                                        className="text-xs px-3 py-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded hover:bg-emerald-200 dark:hover:bg-emerald-900/50"
-                                                    >
-                                                        Surpresinha (Quentes)
+                                                    <button onClick={() => addMissingCycleToSelection(setClosureSelection, closureSelection, closureStrategy.numbers)} 
+                                                        className="text-xs px-3 py-2 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-300/50 rounded hover:bg-amber-200 dark:hover:bg-amber-900/50 font-bold flex items-center justify-center gap-1">
+                                                        <Icon name="RefreshCw" size={12} /> Usar Ciclo
                                                     </button>
-                                                    
-                                                    <button 
-                                                        onClick={handleAutoFindProfit} 
-                                                        disabled={isSearchingProfit || isGeneratingClosure}
-                                                        className="col-span-2 text-xs font-bold px-3 py-2 bg-gradient-to-r from-violet-600 to-violet-500 text-white rounded shadow-neon-purple hover:scale-[1.02] transition-transform flex items-center justify-center gap-1"
-                                                    >
+                                                    <button onClick={handleAutoFindProfit} disabled={isSearchingProfit || isGeneratingClosure}
+                                                        className="col-span-2 text-xs font-bold px-3 py-2 bg-gradient-to-r from-violet-600 to-violet-500 text-white rounded shadow-neon-purple hover:scale-[1.02] transition-transform flex items-center justify-center gap-1">
                                                         <Icon name="Zap" size={14} /> Busca Automática de Lucro
                                                     </button>
                                                 </div>
                                             </div>
 
-                                            <button 
-                                                onClick={handleGenerateClosure}
-                                                disabled={isGeneratingClosure || isSearchingProfit || closureSelection.length !== closureStrategy.numbers}
-                                                className={`w-full py-4 rounded-xl font-bold text-white shadow-lg flex items-center justify-center gap-2 transition-all
-                                                    ${isGeneratingClosure || isSearchingProfit || closureSelection.length !== closureStrategy.numbers 
-                                                        ? 'bg-slate-400 cursor-not-allowed opacity-50' 
-                                                        : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:scale-[1.02]'}
-                                                `}
-                                            >
-                                                {isGeneratingClosure || isSearchingProfit ? (
-                                                    <><div className="loader w-5 h-5 border-2 border-white/30 border-t-white"></div> {isSearchingProfit ? 'Buscando Lucro...' : 'Processando...'}</>
-                                                ) : (
-                                                    <><Icon name="Wand2" /> Gerar Fechamento</>
-                                                )}
+                                            <button onClick={handleGenerateClosure} disabled={isGeneratingClosure || isSearchingProfit || closureSelection.length !== closureStrategy.numbers}
+                                                className={`w-full py-4 rounded-xl font-bold text-white shadow-lg flex items-center justify-center gap-2 transition-all ${isGeneratingClosure || isSearchingProfit || closureSelection.length !== closureStrategy.numbers ? 'bg-slate-400 cursor-not-allowed opacity-50' : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:scale-[1.02]'}`}>
+                                                {isGeneratingClosure || isSearchingProfit ? (<><div className="loader w-5 h-5 border-2 border-white/30 border-t-white"></div> {isSearchingProfit ? 'Buscando Lucro...' : 'Processando...'}</>) : (<><Icon name="Wand2" /> Gerar Fechamento</>)}
                                             </button>
                                         </div>
 
                                         <div className="lg:col-span-2 space-y-6">
-                                            
                                             {!closureResult && !isGeneratingClosure && !isSearchingProfit && (
                                                 <div className="h-full flex flex-col items-center justify-center glass-panel p-10 rounded-xl text-center text-slate-400 dark:text-gray-500 border-2 border-dashed border-slate-300 dark:border-slate-700 opacity-60">
                                                     <Icon name="Grid" size={64} className="mb-4 opacity-30" />
                                                     <h3 className="text-lg font-bold mb-2">Aguardando Geração</h3>
-                                                    <p className="max-w-xs text-sm mb-4">Selecione uma estratégia e seus números, ou use a <strong className="text-violet-500">Busca Automática</strong> para encontrar lucro.</p>
+                                                    <p className="max-w-xs text-sm mb-4">Selecione uma estratégia e seus números. Tente usar as dezenas <strong className="text-amber-500">laranjas</strong> do Ciclo!</p>
                                                 </div>
                                             )}
 
@@ -1132,9 +897,6 @@
                                                 <div className="h-full flex flex-col items-center justify-center glass-panel p-10 rounded-xl text-center text-violet-500 border-2 border-dashed border-violet-500/30">
                                                     <div className="loader w-12 h-12 border-4 border-violet-200 border-t-violet-600 mb-6"></div>
                                                     <h3 className="text-xl font-bold mb-2 animate-pulse">Analisando Combinações...</h3>
-                                                    <p className="text-sm text-slate-500 max-w-sm">
-                                                        A IA está testando centenas de jogos aleatórios contra o histórico filtrado para encontrar um <strong>Resultado Líquido Positivo</strong>.
-                                                    </p>
                                                 </div>
                                             )}
 
@@ -1142,37 +904,18 @@
                                                 <div className="glass-panel p-6 rounded-xl border-l-4 border-amber-500 relative overflow-hidden animate-pulse-once">
                                                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 relative z-10">
                                                         <div>
-                                                            <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
-                                                                <Icon name="Wallet" className="text-amber-500" />
-                                                                Simulação Financeira Real
-                                                            </h3>
-                                                            <p className="text-xs text-slate-500 dark:text-gray-400">
-                                                                Se você tivesse jogado este fechamento em <strong>TODOS</strong> os {activeHistory.length} concursos do filtro:
-                                                            </p>
+                                                            <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2"><Icon name="Wallet" className="text-amber-500" /> Simulação Financeira Real</h3>
                                                         </div>
                                                         <div className={`text-right px-4 py-2 rounded-lg border ${closureSimStats.profit >= 0 ? 'bg-emerald-100 dark:bg-emerald-900/30 border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-900/30 border-red-500 text-red-700 dark:text-red-400'}`}>
                                                             <div className="text-xs font-bold uppercase">Resultado Líquido</div>
                                                             <div className="text-2xl font-bold">R$ {closureSimStats.profit.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
                                                         </div>
                                                     </div>
-
                                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 relative z-10">
-                                                        <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                                                            <div className="text-xs text-slate-500">Investimento Total</div>
-                                                            <div className="font-bold text-slate-800 dark:text-white">R$ {closureSimStats.totalCost.toLocaleString('pt-BR')}</div>
-                                                        </div>
-                                                        <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                                                            <div className="text-xs text-slate-500">Retorno (Prêmios)</div>
-                                                            <div className="font-bold text-emerald-600 dark:text-emerald-400">R$ {closureSimStats.totalPrizes.toLocaleString('pt-BR')}</div>
-                                                        </div>
-                                                        <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                                                            <div className="text-xs text-slate-500">ROI %</div>
-                                                            <div className={`font-bold ${closureSimStats.roi > 0 ? 'text-emerald-500' : 'text-red-500'}`}>{closureSimStats.roi.toFixed(1)}%</div>
-                                                        </div>
-                                                        <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                                                            <div className="text-xs text-slate-500">14 Pontos</div>
-                                                            <div className="font-bold text-amber-500">{closureSimStats.prizesBreakdown[14]}x</div>
-                                                        </div>
+                                                        <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700"><div className="text-xs text-slate-500">Investimento Total</div><div className="font-bold text-slate-800 dark:text-white">R$ {closureSimStats.totalCost.toLocaleString('pt-BR')}</div></div>
+                                                        <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700"><div className="text-xs text-slate-500">Retorno (Prêmios)</div><div className="font-bold text-emerald-600 dark:text-emerald-400">R$ {closureSimStats.totalPrizes.toLocaleString('pt-BR')}</div></div>
+                                                        <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700"><div className="text-xs text-slate-500">ROI %</div><div className={`font-bold ${closureSimStats.roi > 0 ? 'text-emerald-500' : 'text-red-500'}`}>{closureSimStats.roi.toFixed(1)}%</div></div>
+                                                        <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700"><div className="text-xs text-slate-500">14 Pontos</div><div className="font-bold text-amber-500">{closureSimStats.prizesBreakdown[14]}x</div></div>
                                                     </div>
                                                 </div>
                                             )}
@@ -1182,31 +925,16 @@
                                                     <div className="flex justify-between items-center mb-6">
                                                         <div>
                                                             <h3 className="font-bold text-slate-800 dark:text-white">Matriz Gerada ({closureResult.length} Jogos)</h3>
-                                                            <p className="text-xs text-slate-500">Custo do Fechamento: <strong>R$ {(closureResult.length * 3.00).toFixed(2)}</strong> <span className="text-red-400 line-through ml-2">R$ {(getCombinations(Array(closureStrategy.numbers), 15).length * 3).toFixed(2)}</span></p>
+                                                            <p className="text-xs text-slate-500">Custo: <strong>R$ {(closureResult.length * 3.00).toFixed(2)}</strong></p>
                                                         </div>
-                                                        <button 
-                                                            onClick={saveClosureGames}
-                                                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold rounded-lg shadow-lg flex items-center gap-2"
-                                                        >
-                                                            <Icon name="Save" size={16} /> Salvar Jogos
-                                                        </button>
+                                                        <button onClick={saveClosureGames} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold rounded-lg shadow-lg flex items-center gap-2"><Icon name="Save" size={16} /> Salvar Jogos</button>
                                                     </div>
-
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
                                                         {closureResult.map((game, idx) => (
                                                             <div key={idx} className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 rounded-lg flex flex-col gap-2">
-                                                                <div className="flex justify-between items-center">
-                                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Jogo {idx + 1}</span>
-                                                                    <div className="flex gap-2 text-[10px] text-slate-500">
-                                                                        <span>P: {game.filter(n=>n%2===0).length}</span>
-                                                                        <span>I: {game.filter(n=>n%2!==0).length}</span>
-                                                                        <span>S: {game.reduce((a,b)=>a+b,0)}</span>
-                                                                    </div>
-                                                                </div>
+                                                                <div className="flex justify-between items-center"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Jogo {idx + 1}</span></div>
                                                                 <div className="flex flex-wrap gap-1">
-                                                                    {game.map(n => (
-                                                                        <MiniBall key={n} n={n} isHot={stats.hotSet.has(n)} isCold={stats.coldSet.has(n)} />
-                                                                    ))}
+                                                                    {game.map(n => <MiniBall key={n} n={n} isHot={stats.hotSet.has(n)} isCold={stats.coldSet.has(n)} isCycleMissing={cycleData?.missingSet?.has(n)} />)}
                                                                 </div>
                                                             </div>
                                                         ))}
@@ -1220,7 +948,7 @@
 
                             {activeTab === 'manual' && (
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-pulse-once">
-                                    <div className="glass-panel p-6 rounded-xl border border-emerald-500/30">
+                                    <div className="glass-panel p-6 rounded-xl border border-emerald-500/30 h-fit">
                                         <div className="flex justify-between items-center mb-4">
                                             <h2 className="text-lg font-bold text-slate-800 dark:text-white">Seletor da Cartela</h2>
                                             <span className={`text-xs font-bold px-2 py-1 rounded ${manualSelection.length === 15 ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-gray-400'}`}>
@@ -1230,32 +958,14 @@
                                         
                                         <div className="grid grid-cols-5 gap-3 mb-6">
                                             {Array.from({length: 25}, (_, i) => i + 1).map(n => (
-                                                <Ball 
-                                                    key={n} 
-                                                    n={n} 
-                                                    selected={manualSelection.includes(n)} 
-                                                    isHot={stats?.hotSet?.has(n)}
-                                                    isCold={stats?.coldSet?.has(n)}
-                                                    onClick={toggleManualNumber} 
-                                                />
+                                                <Ball key={n} n={n} selected={manualSelection.includes(n)} isHot={stats?.hotSet?.has(n)} isCold={stats?.coldSet?.has(n)} isCycleMissing={cycleData?.missingSet?.has(n)} onClick={toggleManualNumber} />
                                             ))}
                                         </div>
                                         
-                                        <div className="flex gap-2">
-                                            <button 
-                                                onClick={() => setManualSelection([])}
-                                                className="flex-1 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded text-sm text-slate-700 dark:text-white transition-colors"
-                                            >
-                                                Limpar
-                                            </button>
-                                            <button 
-                                                onClick={() => {
-                                                    if(stats) setManualSelection([...stats.lastDraw.Dezenas])
-                                                }}
-                                                className="flex-1 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded text-sm text-slate-700 dark:text-white transition-colors"
-                                            >
-                                                Usar Último
-                                            </button>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <button onClick={() => setManualSelection([])} className="py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded text-xs text-slate-700 dark:text-white transition-colors">Limpar</button>
+                                            <button onClick={() => { if(stats) setManualSelection([...stats.lastDraw.Dezenas]) }} className="py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded text-xs text-slate-700 dark:text-white transition-colors">Último</button>
+                                            <button onClick={() => addMissingCycleToSelection(setManualSelection, manualSelection, 15)} className="py-2 bg-amber-100 dark:bg-amber-900/30 border border-amber-300/50 hover:bg-amber-200 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-400 font-bold rounded text-xs flex items-center justify-center gap-1 shadow-sm"><Icon name="RefreshCw" size={12}/> Ciclo</button>
                                         </div>
 
                                         {manualAnalysis && (
@@ -1266,11 +976,7 @@
                                                         const count = manualAnalysis.hitsFull[pts];
                                                         return (
                                                             <div key={pts} className="text-xs md:text-sm text-slate-600 dark:text-slate-400">
-                                                                {count > 0 ? (
-                                                                    <span>Você teria feito <strong className="text-emerald-600 dark:text-emerald-400">{pts}</strong> acertos em <strong className="text-slate-900 dark:text-white">{count}</strong> {count === 1 ? 'concurso' : 'concursos'}.</span>
-                                                                ) : (
-                                                                    <span>Você não teria feito <strong className="text-slate-500">{pts}</strong> acertos.</span>
-                                                                )}
+                                                                {count > 0 ? (<span>Teria feito <strong className="text-emerald-600 dark:text-emerald-400">{pts}</strong> acertos em <strong className="text-slate-900 dark:text-white">{count}</strong> concursos.</span>) : (<span>Não teria feito <strong className="text-slate-500">{pts}</strong> acertos.</span>)}
                                                             </div>
                                                         )
                                                     })}
@@ -1288,92 +994,39 @@
                                         ) : (
                                             <>
                                                 <div className="glass-panel p-6 rounded-xl">
-                                                    <h3 className="text-slate-800 dark:text-white font-bold mb-4 flex items-center gap-2">
-                                                        <Icon name="History" className="text-amber-500" />
-                                                        Performance Histórica ({scopeSize === 'all' ? 'Todos os Concursos' : `Últimos ${scopeSize} Concursos`})
-                                                    </h3>
+                                                    <h3 className="text-slate-800 dark:text-white font-bold mb-4 flex items-center gap-2"><Icon name="History" className="text-amber-500" /> Performance Histórica</h3>
                                                     <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
                                                         {[11,12,13,14,15].map(pts => (
                                                             <div key={pts} className={`text-center p-3 rounded-lg border ${pts === 15 ? 'bg-emerald-100 dark:bg-emerald-900/30 border-emerald-500' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
-                                                                <div className={`text-xs font-bold uppercase mb-1 ${pts === 15 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-gray-400'}`}>
-                                                                    {pts} Pontos
-                                                                </div>
-                                                                <div className="text-2xl font-bold text-slate-800 dark:text-white">
-                                                                    {manualAnalysis.hitsFull[pts]}
-                                                                </div>
+                                                                <div className={`text-xs font-bold uppercase mb-1 ${pts === 15 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-gray-400'}`}>{pts} Pontos</div>
+                                                                <div className="text-2xl font-bold text-slate-800 dark:text-white">{manualAnalysis.hitsFull[pts]}</div>
                                                                 <div className="text-[10px] text-slate-500 dark:text-gray-500">vezes</div>
                                                             </div>
                                                         ))}
                                                     </div>
                                                 </div>
 
-                                                <div className="glass-panel p-6 rounded-xl">
-                                                    <h3 className="text-slate-800 dark:text-white font-bold mb-4">Análise Individual no Período</h3>
-                                                    <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
-                                                        {manualAnalysis.individualStats.map(stat => (
-                                                            <div key={stat.n} className="bg-slate-50 dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700 flex flex-col items-center">
-                                                                <span className={`font-bold text-lg ${stats.hotSet.has(stat.n) ? 'text-red-500' : stats.coldSet.has(stat.n) ? 'text-blue-500' : 'text-emerald-600 dark:text-emerald-400'}`}>{stat.n}</span>
-                                                                <span className="text-xs text-slate-700 dark:text-white">{stat.count}x</span>
-                                                                <div className="w-full bg-slate-200 dark:bg-slate-700 h-1 mt-1 rounded-full overflow-hidden">
-                                                                    <div className={`${stats.hotSet.has(stat.n) ? 'bg-red-500' : stats.coldSet.has(stat.n) ? 'bg-blue-500' : 'bg-emerald-500'} h-full`} style={{width: `${stat.percent}%`}}></div>
-                                                                </div>
-                                                                <span className="text-[9px] text-slate-500 dark:text-gray-500">{stat.percent}% freq</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                                
                                                 <div className="glass-panel p-6 rounded-xl border-t-4 border-emerald-500 mt-6">
                                                     <h3 className="text-slate-800 dark:text-white font-bold mb-4 flex items-center gap-2">
-                                                        <Icon name="Database" className="text-emerald-500" />
-                                                        Concursos Premiados com esta Seleção ({manualAnalysis.awardsLog.length})
+                                                        <Icon name="Database" className="text-emerald-500" /> Concursos Premiados com esta Seleção ({manualAnalysis.awardsLog.length})
                                                     </h3>
-                                                    
                                                     <div className="overflow-x-auto max-h-96 overflow-y-auto pr-2 custom-scrollbar">
                                                         <table className="w-full text-sm text-left text-slate-500 dark:text-gray-400">
                                                             <thead className="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-700 dark:text-gray-400 sticky top-0 z-10">
-                                                                <tr>
-                                                                    <th className="px-4 py-3 rounded-tl-lg">Concurso</th>
-                                                                    <th className="px-4 py-3">Data</th>
-                                                                    <th className="px-4 py-3 text-center">Acertos</th>
-                                                                    <th className="px-4 py-3 rounded-tr-lg">Dezenas Sorteads (Coincidentes)</th>
-                                                                </tr>
+                                                                <tr><th className="px-4 py-3 rounded-tl-lg">Concurso</th><th className="px-4 py-3">Data</th><th className="px-4 py-3 text-center">Acertos</th><th className="px-4 py-3 rounded-tr-lg">Dezenas Sorteads</th></tr>
                                                             </thead>
                                                             <tbody>
                                                                 {manualAnalysis.awardsLog.map((log) => (
                                                                     <tr key={log.Concurso} className="bg-white border-b dark:bg-slate-800 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600">
-                                                                        <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">#{log.Concurso}</td>
-                                                                        <td className="px-4 py-3">{log.Data}</td>
-                                                                        <td className="px-4 py-3 text-center">
-                                                                            <span className={`px-2 py-1 rounded text-xs font-bold 
-                                                                                ${log.hits === 15 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 
-                                                                                  log.hits === 14 ? 'bg-amber-100 text-amber-800 border border-amber-300' : 
-                                                                                  'bg-blue-100 text-blue-800 border border-blue-300'}`}>
-                                                                                {log.hits} pts
-                                                                            </span>
-                                                                        </td>
+                                                                        <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">#{log.Concurso}</td><td className="px-4 py-3">{log.Data}</td>
+                                                                        <td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded text-xs font-bold ${log.hits === 15 ? 'bg-emerald-100 text-emerald-800' : log.hits === 14 ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>{log.hits} pts</span></td>
                                                                         <td className="px-4 py-3">
                                                                             <div className="flex flex-wrap gap-1 max-w-md">
-                                                                                {log.Dezenas.map(n => {
-                                                                                    const isHit = manualSelection.includes(n);
-                                                                                    return (
-                                                                                        <span key={n} className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold 
-                                                                                            ${isHit ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-400'}`}>
-                                                                                            {n}
-                                                                                        </span>
-                                                                                    );
-                                                                                })}
+                                                                                {log.Dezenas.map(n => (<span key={n} className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold ${manualSelection.includes(n) ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-400'}`}>{n}</span>))}
                                                                             </div>
                                                                         </td>
                                                                     </tr>
                                                                 ))}
-                                                                {manualAnalysis.awardsLog.length === 0 && (
-                                                                    <tr>
-                                                                        <td colSpan="4" className="px-6 py-8 text-center text-slate-500">
-                                                                            Nenhum prêmio encontrado neste período histórico para a combinação selecionada.
-                                                                        </td>
-                                                                    </tr>
-                                                                )}
                                                             </tbody>
                                                         </table>
                                                     </div>
@@ -1387,47 +1040,12 @@
                             {activeTab === 'generator' && (
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                                     <div className="glass-panel p-6 rounded-xl h-fit">
-                                        <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
-                                            <Icon name="Sliders" className="text-emerald-500" /> Configuração IA
-                                        </h2>
-                                        
-                                        <div className="space-y-6">
-                                            <div>
-                                                <div className="flex justify-between text-xs text-slate-500 dark:text-gray-400 mb-2">
-                                                    <span>Ímpares</span>
-                                                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">{genFilters.oddTarget}</span>
-                                                </div>
-                                                <input type="range" min="4" max="11" value={genFilters.oddTarget} onChange={e=>setGenFilters({...genFilters, oddTarget: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"/>
-                                            </div>
-
-                                            <div>
-                                                <div className="flex justify-between text-xs text-slate-500 dark:text-gray-400 mb-2">
-                                                    <span>Repetidos do Anterior</span>
-                                                    <span className="text-blue-600 dark:text-blue-400 font-bold">{genFilters.repeatsTarget}</span>
-                                                </div>
-                                                <input type="range" min="5" max="13" value={genFilters.repeatsTarget} onChange={e=>setGenFilters({...genFilters, repeatsTarget: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"/>
-                                            </div>
-
-                                            <div>
-                                                <span className="text-xs text-slate-500 dark:text-gray-400 mb-1 block">Intervalo de Soma</span>
-                                                <div className="flex gap-2">
-                                                    <input type="number" className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded p-2 text-slate-800 dark:text-white text-center" value={genFilters.sumMin} onChange={e=>setGenFilters({...genFilters, sumMin: parseInt(e.target.value)})}/>
-                                                    <input type="number" className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded p-2 text-slate-800 dark:text-white text-center" value={genFilters.sumMax} onChange={e=>setGenFilters({...genFilters, sumMax: parseInt(e.target.value)})}/>
-                                                </div>
-                                            </div>
-
-                                            <button onClick={generateGame} className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:brightness-110 text-white font-bold rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all">
-                                                <Icon name="Wand2" size={18} /> Gerar Palpites
-                                            </button>
-                                        </div>
+                                        <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2"><Icon name="Sliders" className="text-emerald-500" /> Configuração IA</h2>
+                                        <button onClick={generateGame} className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:brightness-110 text-white font-bold rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all">
+                                            <Icon name="Wand2" size={18} /> Gerar Palpites
+                                        </button>
                                     </div>
-
                                     <div className="md:col-span-2 space-y-4">
-                                        <div className="flex justify-between items-center">
-                                            <h2 className="text-slate-800 dark:text-white font-bold">Jogos Gerados</h2>
-                                            <span className="text-xs text-slate-500 dark:text-gray-500">Performance testada em: {scopeSize === 'all' ? 'Toda História' : `Últimos ${scopeSize}`}</span>
-                                        </div>
-                                        
                                         <div className="space-y-3">
                                             {generatedGames.map((game, i) => {
                                                 const perf = checkPerformance(game.numbers);
@@ -1435,36 +1053,15 @@
                                                     <div key={game.id} className="glass-panel p-4 rounded-xl border-l-4 border-emerald-500 flex flex-col md:flex-row gap-4 justify-between items-center hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
                                                         <div className="flex-1">
                                                             <div className="flex gap-1 mb-2">
-                                                                {game.numbers.map(n => (
-                                                                    <MiniBall key={n} n={n} isHot={stats.hotSet.has(n)} isCold={stats.coldSet.has(n)} />
-                                                                ))}
-                                                            </div>
-                                                            <div className="flex gap-3 text-[10px] text-slate-500 dark:text-gray-500 uppercase tracking-wider">
-                                                                <span>Soma: {game.meta.sum}</span>
-                                                                <span>Ímp: {game.meta.odds}</span>
-                                                                <span>Rep: {game.meta.repeats}</span>
+                                                                {game.numbers.map(n => <MiniBall key={n} n={n} isHot={stats.hotSet.has(n)} isCold={stats.coldSet.has(n)} isCycleMissing={cycleData?.missingSet?.has(n)} />)}
                                                             </div>
                                                         </div>
-                                                        
                                                         <div className="flex items-center gap-4 border-l border-slate-200 dark:border-slate-700 pl-4">
-                                                            <div className="text-right">
-                                                                <div className="text-[10px] text-slate-500 dark:text-gray-400">Melhor Resultado (Período)</div>
-                                                                <div className={`text-lg font-bold ${perf.maxHits >= 14 ? 'text-amber-500' : perf.maxHits >= 11 ? 'text-emerald-500' : 'text-slate-400 dark:text-gray-500'}`}>
-                                                                    {perf.maxHits} Pontos
-                                                                </div>
-                                                            </div>
-                                                            <button onClick={() => setSavedGames([...savedGames, game])} className="p-2 bg-emerald-100 dark:bg-emerald-500/10 hover:bg-emerald-500 text-emerald-600 dark:text-emerald-400 hover:text-white rounded-lg transition-colors">
-                                                                <Icon name="BookmarkPlus" />
-                                                            </button>
+                                                            <button onClick={() => setSavedGames([...savedGames, game])} className="p-2 bg-emerald-100 hover:bg-emerald-500 text-emerald-600 hover:text-white rounded-lg transition-colors"><Icon name="BookmarkPlus" /></button>
                                                         </div>
                                                     </div>
                                                 );
                                             })}
-                                            {generatedGames.length === 0 && (
-                                                <div className="text-center py-12 text-slate-500 dark:text-gray-500 bg-slate-100 dark:bg-slate-800/30 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl">
-                                                    Aperte "Gerar Palpites" para usar a inteligência artificial.
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -1476,17 +1073,9 @@
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {savedGames.map((game, i) => (
                                             <div key={i} className="glass-panel p-4 rounded-xl relative group">
-                                                <button onClick={() => setSavedGames(savedGames.filter(g => g.id !== game.id))} className="absolute top-2 right-2 text-red-400 opacity-0 group-hover:opacity-100 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-all">
-                                                    <Icon name="Trash2" size={16} />
-                                                </button>
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <div className="text-xs text-emerald-500 font-bold">JOGO {i+1}</div>
-                                                    {game.meta.tag && <span className="text-[9px] bg-slate-100 dark:bg-slate-700 px-1 rounded text-slate-500">{game.meta.tag}</span>}
-                                                </div>
-                                                <div className="flex flex-wrap gap-1 mb-2">
-                                                    {game.numbers.map(n => (
-                                                        <MiniBall key={n} n={n} isHot={stats.hotSet.has(n)} isCold={stats.coldSet.has(n)} />
-                                                    ))}
+                                                <button onClick={() => setSavedGames(savedGames.filter(g => g.id !== game.id))} className="absolute top-2 right-2 text-red-400 opacity-0 group-hover:opacity-100 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-all"><Icon name="Trash2" size={16} /></button>
+                                                <div className="flex flex-wrap gap-1 mt-4">
+                                                    {game.numbers.map(n => <MiniBall key={n} n={n} isHot={stats.hotSet.has(n)} isCold={stats.coldSet.has(n)} isCycleMissing={cycleData?.missingSet?.has(n)} />)}
                                                 </div>
                                             </div>
                                         ))}
