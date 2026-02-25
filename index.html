@@ -146,7 +146,6 @@
             } else {
                 classes.push("bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600");
                 
-                // Prioridade de visualização: Se falta no ciclo, fica laranja. Se não, mostra se é quente/frio.
                 if (isCycleMissing) {
                     classes.push("text-amber-600 dark:text-amber-400 font-extrabold border-amber-500 shadow-neon-amber ring-1 ring-amber-400/30 z-10");
                 }
@@ -289,22 +288,17 @@
             }, [fullHistory]);
             useEffect(() => { localStorage.setItem('loto_saved_games', JSON.stringify(savedGames)); }, [savedGames]);
 
-            // --- LÓGICA DO CICLO DAS DEZENAS ---
             const cycleData = useMemo(() => {
                 if (!fullHistory || fullHistory.length === 0) return null;
                 
                 let currentOpenCycleDraws = [];
                 let tempSet = new Set();
                 
-                // Vai do mais recente (0) para o mais antigo, tentando achar o corte do ciclo
                 for (let i = 0; i < fullHistory.length; i++) {
                     let draw = fullHistory[i];
                     let newNums = 0;
                     draw.Dezenas.forEach(n => { if (!tempSet.has(n)) newNums++; });
 
-                    // Se adicionar as dezenas deste sorteio fechar os 25, 
-                    // significa que este sorteio no passado FOI o último de um ciclo fechado.
-                    // O ciclo ATUAL (aberto) são apenas os jogos DEPOIS dele (ou seja, de 0 até i-1).
                     if (tempSet.size + newNums === 25) {
                         currentOpenCycleDraws = fullHistory.slice(0, i);
                         break;
@@ -313,7 +307,6 @@
                     }
                 }
 
-                // Extrai as que saíram e as que faltam no ciclo ABERTO
                 let drawnInOpenCycle = new Set();
                 currentOpenCycleDraws.forEach(d => d.Dezenas.forEach(n => drawnInOpenCycle.add(n)));
                 
@@ -329,92 +322,130 @@
                 };
             }, [fullHistory]);
 
-            // --- O PARSER BLINDADO (RESOLVE O PROBLEMA DO ARQUIVO DA CAIXA) ---
+            // --- O NOVO PARSER "TRATOR" ---
             const handleFileUpload = (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
 
                 const processData = (parsed) => {
-                    if (parsed.length > 0) {
-                        parsed.sort((a, b) => b.Concurso - a.Concurso);
-                        setFullHistory(parsed);
+                    // Remover duplicados pelo Concurso para evitar dor de cabeça
+                    const uniqueParsedMap = new Map();
+                    parsed.forEach(p => {
+                        if (!uniqueParsedMap.has(p.Concurso)) uniqueParsedMap.set(p.Concurso, p);
+                    });
+                    const uniqueParsed = Array.from(uniqueParsedMap.values());
+
+                    if (uniqueParsed.length > 0) {
+                        uniqueParsed.sort((a, b) => b.Concurso - a.Concurso);
+                        setFullHistory(uniqueParsed);
                         setIsFileLoaded(true);
                         setError(null);
                         setActiveTab('dashboard');
                     } else {
-                        setError("O arquivo não parece conter resultados válidos da Lotofácil. Certifique-se de baixar do site da Caixa.");
+                        setError("O arquivo não parece conter resultados válidos da Lotofácil (ou a formatação está diferente do esperado).");
                     }
+                    
+                    // Reseta o input para permitir clicar e enviar o mesmo arquivo de novo se precisar
+                    if (fileInputRef.current) fileInputRef.current.value = '';
                 };
 
-                // Função de Força Bruta para extrair resultados de HTML puro
-                const parseHTMLTableString = (htmlString) => {
-                    const doc = new DOMParser().parseFromString(htmlString, 'text/html');
-                    const rows = doc.querySelectorAll('tr');
-                    const parsed = [];
+                // Função super-flexível que analisa linha a linha
+                const extractValidRow = (rowArray) => {
+                    if (!rowArray || rowArray.length < 15) return null;
                     
-                    rows.forEach(row => {
-                        const cells = row.querySelectorAll('td, th');
-                        const vals = Array.from(cells).map(c => c.textContent.trim());
-                        
-                        const concurso = parseInt(vals[0]);
-                        if(isNaN(concurso) || concurso <= 0) return;
-                        
-                        const nums = vals.map(v => parseInt(v)).filter(n => !isNaN(n) && n >= 1 && n <= 25);
-                        const uniqueNums = [...new Set(nums)];
-                        
-                        let dezenas = [];
-                        let sliced = vals.slice(2, 17).map(v => parseInt(v)).filter(n => !isNaN(n) && n>=1 && n<=25);
-                        
-                        if ([...new Set(sliced)].length === 15) dezenas = sliced;
-                        else if (uniqueNums.length >= 15) dezenas = uniqueNums.slice(-15);
-                        
-                        if(dezenas.length === 15) {
-                            parsed.push({ Concurso: concurso, Data: vals[1] || '', Dezenas: dezenas.sort((a,b)=>a-b) });
+                    // Pega a primeira coluna e força a ser número (limpa pontos se tiver "1.050")
+                    let rawConcurso = String(rowArray[0]).trim().replace(/\./g, '');
+                    if (!/^\d+$/.test(rawConcurso)) return null; 
+                    let concurso = parseInt(rawConcurso, 10);
+                    // Ignora números que claramente não são concursos reais ainda
+                    if (isNaN(concurso) || concurso <= 0 || concurso > 20000) return null;
+
+                    // Helper para verificar se um texto puro é EXATAMENTE uma dezena da lotofácil (evita R$ 15,00 etc)
+                    const isValidBall = (val) => {
+                        let s = String(val).trim();
+                        // Tem que ter exatamente 1 ou 2 dígitos puros (sem letras, sem vírgulas)
+                        if (/^\d{1,2}$/.test(s)) {
+                            let n = parseInt(s, 10);
+                            return (n >= 1 && n <= 25) ? n : null;
                         }
-                    });
-                    return parsed;
+                        return null;
+                    };
+
+                    // TENTATIVA 1: O Padrão Rígido da Caixa (as dezenas ficam exatamente da coluna 2 à 16)
+                    let strictCaixa = rowArray.slice(2, 17).map(isValidBall).filter(n => n !== null);
+                    if ([...new Set(strictCaixa)].length === 15) {
+                        return { Concurso: concurso, Data: String(rowArray[1] || '').trim(), Dezenas: [...new Set(strictCaixa)].sort((a,b)=>a-b) };
+                    }
+
+                    // TENTATIVA 2: Busca "Solta" (Trator). Procura as 15 primeiras dezenas na linha ignorando o que for inútil.
+                    let looseDezenas = [];
+                    let data = '';
+                    for (let i = 1; i < rowArray.length; i++) {
+                        let val = String(rowArray[i]).trim();
+                        if (val.match(/^\d{2}\/\d{2}\/\d{4}$/) && !data) data = val;
+                        
+                        let num = isValidBall(val);
+                        if (num !== null && !looseDezenas.includes(num)) {
+                            looseDezenas.push(num);
+                        }
+                        if (looseDezenas.length === 15) break;
+                    }
+
+                    if (looseDezenas.length === 15) {
+                        return { Concurso: concurso, Data: data || String(rowArray[1] || '').trim(), Dezenas: looseDezenas.sort((a,b)=>a-b) };
+                    }
+                    
+                    return null; // A linha não continha 15 números válidos
                 };
 
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     const buffer = e.target.result;
-                    let parsed = [];
+                    let parsedList = [];
                     
+                    // 1. Tenta usar a biblioteca de XLSX padrão
                     try {
                         const workbook = XLSX.read(buffer, {type: 'array'});
                         let sheetName = workbook.SheetNames.find(n => n.toUpperCase().includes('LOTOFÁCIL')) || workbook.SheetNames[0];
                         const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
 
-                        rawData.forEach(row => {
-                            if (!Array.isArray(row)) return;
-                            const concurso = parseInt(row[0]);
-                            if (isNaN(concurso) || concurso <= 0) return;
-
-                            const nums = row.map(v => parseInt(v)).filter(n => !isNaN(n) && n >= 1 && n <= 25);
-                            let slicedNums = row.slice(2, 17).map(v => parseInt(v)).filter(n => !isNaN(n) && n >= 1 && n <= 25);
-                            
-                            let dezenas = [];
-                            if ([...new Set(slicedNums)].length === 15) dezenas = [...new Set(slicedNums)];
-                            else if ([...new Set(nums)].length >= 15) dezenas = [...new Set(nums)].slice(-15);
-
-                            if (dezenas.length === 15) {
-                                parsed.push({ Concurso: concurso, Data: row[1] || '', Dezenas: dezenas.sort((a,b) => a-b) });
+                        for (let row of rawData) {
+                            if (Array.isArray(row)) {
+                                let extracted = extractValidRow(row);
+                                if (extracted) parsedList.push(extracted);
                             }
-                        });
-                    } catch (err) { console.warn("XLSX parsing failed. Trying brute-force text parsing."); }
+                        }
+                    } catch (err) { console.warn("Erro ao ler como XLSX puro:", err); }
 
-                    // Se o XLSX falhou porque era um HTML falso da Caixa, roda a força bruta:
-                    if (parsed.length === 0) {
+                    // 2. Se a lib XLSX não achou nada (ou a Caixa disfarçou o arquivo), usamos texto força-bruta
+                    if (parsedList.length === 0) {
                         try {
-                            const decoder = new TextDecoder("windows-1252"); // Caixa usa padrão windows
+                            const decoder = new TextDecoder("windows-1252");
                             const textString = decoder.decode(buffer);
-                            parsed = parseHTMLTableString(textString);
+                            
+                            let rows = [];
+                            if (textString.includes('<tr') || textString.includes('<TR')) {
+                                const tempDiv = document.createElement('div');
+                                tempDiv.innerHTML = textString;
+                                const trs = tempDiv.querySelectorAll('tr');
+                                trs.forEach(tr => {
+                                    let cells = Array.from(tr.querySelectorAll('td, th')).map(td => td.textContent.trim());
+                                    rows.push(cells);
+                                });
+                            } else {
+                                rows = textString.split('\n').map(line => line.split(/[;,|\t]/).map(s => s.trim()));
+                            }
+
+                            for (let row of rows) {
+                                let extracted = extractValidRow(row);
+                                if (extracted) parsedList.push(extracted);
+                            }
                         } catch(err2) {
-                            console.error("Text fallback failed too.");
+                            console.error("Erro no fallback de texto/HTML:", err2);
                         }
                     }
 
-                    processData(parsed);
+                    processData(parsedList);
                 };
                 reader.readAsArrayBuffer(file);
             };
@@ -511,7 +542,6 @@
                 }
             };
 
-            // Nova função de suporte
             const addMissingCycleToSelection = (setterFunction, currentSelection, limit) => {
                 if (!cycleData || cycleData.missingNumbers.length === 0) {
                     return alert("O ciclo atual acabou de fechar! Nenhuma dezena pendente.");
