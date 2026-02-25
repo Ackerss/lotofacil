@@ -183,38 +183,26 @@
             );
         };
 
-        // --- ATUALIZADO: COMPONENTE BALL COM AURA PERSISTENTE ---
         const Ball = ({ n, selected, onClick, size = "md", isHot, isCold, extraClass = "" }) => {
-            
             let classes = ["flex items-center justify-center rounded-full transition-all duration-300 border"];
             
-            // Interatividade
             if (onClick) classes.push("cursor-pointer hover:scale-110");
             
-            // Tamanho
             if (size === 'sm') classes.push("w-6 h-6 text-xs");
             else if (size === 'lg') classes.push("w-12 h-12 text-lg");
             else classes.push("w-9 h-9 text-sm font-bold");
 
-            // Lógica de Cores e Aura
             if (selected) {
-                // SELECIONADO: Fundo Verde
                 classes.push("bg-gradient-to-br from-emerald-500 to-emerald-700 text-white");
                 
-                // AURA PERSISTENTE: Se for Hot ou Cold, a borda e o glow mudam de cor
-                // mesmo estando selecionado.
                 if (isHot) {
-                    // Selecionado + Hot = Fundo Verde, Borda/Glow Vermelho
                     classes.push("border-red-500 shadow-neon-red ring-2 ring-red-500/50 z-10"); 
                 } else if (isCold) {
-                    // Selecionado + Cold = Fundo Verde, Borda/Glow Azul
                     classes.push("border-blue-400 shadow-neon-blue ring-2 ring-blue-400/50 z-10"); 
                 } else {
-                    // Selecionado + Neutro = Fundo Verde, Borda Verde
                     classes.push("border-emerald-400 shadow-emerald-900/50 shadow-lg"); 
                 }
             } else {
-                // NÃO SELECIONADO
                 classes.push("bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600");
                 
                 if (isHot) {
@@ -236,7 +224,6 @@
             );
         };
 
-        // Helper para renderizar mini bolas (listas) com a mesma lógica visual
         const MiniBall = ({ n, isHot, isCold }) => {
              let miniClass = "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600";
              
@@ -253,8 +240,6 @@
              )
         };
 
-
-        // --- CLOSURE (FECHAMENTOS) LOGIC ---
         const CLOSURE_STRATEGIES = [
             { id: 1, name: "17 Dezenas: Garante 14 pontos (se acertar 15)", numbers: 17, guarantee: 14, condition: 15, estimatedGames: 8, efficiency: "Alta" },
             { id: 2, name: "18 Dezenas: Garante 14 pontos (se acertar 15)", numbers: 18, guarantee: 14, condition: 15, estimatedGames: 24, efficiency: "Média" },
@@ -263,7 +248,6 @@
             { id: 5, name: "18 Dezenas: Garante 13 pontos (se acertar 15)", numbers: 18, guarantee: 13, condition: 15, estimatedGames: 6, efficiency: "Super Alta" },
         ];
 
-        // Helper: Generate Combinations
         const getCombinations = (arr, k) => {
             const result = [];
             function backtrack(start, combo) {
@@ -281,18 +265,13 @@
             return result;
         };
 
-        // Helper: Greedy Covering Algorithm for Closures
         const generateOptimizedClosure = (selectedNumbers, strategy) => {
-            const K = 15; // Game size
+            const K = 15;
             const { guarantee, condition } = strategy;
             
-            // 1. Generate all possible winning scenarios (Condition)
             const scenarios = getCombinations(selectedNumbers, condition);
-            
-            // 2. Generate all possible games the user *could* play from their selection
             const potentialGames = getCombinations(selectedNumbers, K);
 
-            // 3. Greedy Selection
             const finalGames = [];
             let uncoveredScenarios = [...scenarios];
 
@@ -301,15 +280,12 @@
                 let bestCoveredCount = -1;
                 let bestCoveredIndices = [];
 
-                // Try to find the single game that covers the most remaining scenarios
                 for (let i = 0; i < potentialGames.length; i++) {
                     const game = potentialGames[i];
                     let currentCoveredIndices = [];
                     
-                    // Check how many scenarios this game covers
                     for (let j = 0; j < uncoveredScenarios.length; j++) {
                         const scenario = uncoveredScenarios[j];
-                        // Count matches between game and scenario
                         let matchCount = 0;
                         let p1 = 0, p2 = 0;
                         while(p1 < game.length && p2 < scenario.length) {
@@ -332,7 +308,6 @@
 
                 if (bestGame) {
                     finalGames.push(bestGame);
-                    // Remove covered scenarios (filter by index is tricky in loop, better to rebuild)
                     const newUncovered = [];
                     const coveredSet = new Set(bestCoveredIndices);
                     for(let k=0; k<uncoveredScenarios.length; k++){
@@ -340,19 +315,16 @@
                     }
                     uncoveredScenarios = newUncovered;
                     
-                    // Optimization: remove used game from potential
                     const gameIdx = potentialGames.indexOf(bestGame);
                     if(gameIdx > -1) potentialGames.splice(gameIdx, 1);
                 } else {
-                    break; // Should not happen if parameters are valid
+                    break; 
                 }
             }
             return finalGames;
         };
 
-        // --- APP LOGIC ---
         function App() {
-            // Theme State
             const [theme, setTheme] = useState(() => {
                 try { return localStorage.getItem('loto_theme') || 'dark'; } 
                 catch(e) { return 'dark'; }
@@ -366,7 +338,6 @@
 
             const [activeTab, setActiveTab] = useState('dashboard');
             
-            // Dados Globais
             const [fullHistory, setFullHistory] = useState(() => {
                 try {
                     const saved = localStorage.getItem('loto_full_history_v2');
@@ -374,10 +345,8 @@
                 } catch(e) { return []; }
             });
 
-            // Estado para Filtro Global
             const [scopeSize, setScopeSize] = useState('all'); 
 
-            // Dados Computados baseados no Filtro
             const activeHistory = useMemo(() => {
                 if (scopeSize === 'all') return fullHistory;
                 const limit = parseInt(scopeSize);
@@ -387,7 +356,6 @@
             const [isFileLoaded, setIsFileLoaded] = useState(fullHistory.length > 0);
             const [error, setError] = useState(null);
             
-            // Generator State
             const [genFilters, setGenFilters] = useState({
                 oddTarget: 8, 
                 sumMin: 180,
@@ -404,20 +372,17 @@
                 } catch (e) { return []; }
             });
 
-            // Manual Analysis State
             const [manualSelection, setManualSelection] = useState([]);
             
-            // Closure (Fechamento) State
             const [closureStrategy, setClosureStrategy] = useState(CLOSURE_STRATEGIES[0]);
             const [closureSelection, setClosureSelection] = useState([]);
             const [closureResult, setClosureResult] = useState(null);
             const [isGeneratingClosure, setIsGeneratingClosure] = useState(false);
             const [closureSimStats, setClosureSimStats] = useState(null);
-            const [isSearchingProfit, setIsSearchingProfit] = useState(false); // NOVO ESTADO
+            const [isSearchingProfit, setIsSearchingProfit] = useState(false); 
 
             const fileInputRef = useRef(null);
 
-            // --- PERSISTENCE ---
             useEffect(() => {
                 if (fullHistory.length > 0) {
                     try {
@@ -430,13 +395,13 @@
                 localStorage.setItem('loto_saved_games', JSON.stringify(savedGames));
             }, [savedGames]);
 
-            // --- FILE PARSING ---
+            // --- CORREÇÃO DO PARSER AQUI ---
             const handleFileUpload = (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
 
                 const reader = new FileReader();
-                const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+                const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.htm');
 
                 const processData = (data) => {
                     if (data.length > 0) {
@@ -446,7 +411,7 @@
                         setError(null);
                         setActiveTab('dashboard');
                     } else {
-                        setError("Nenhum dado válido encontrado.");
+                        setError("Nenhum dado válido encontrado. Verifique o arquivo da Caixa.");
                     }
                 };
 
@@ -457,28 +422,46 @@
                             const workbook = XLSX.read(data, {type: 'array'});
                             let sheetName = workbook.SheetNames.find(n => n.toUpperCase().includes('LOTOFÁCIL')) || workbook.SheetNames[0];
                             const worksheet = workbook.Sheets[sheetName];
-                            const jsonData = XLSX.utils.sheet_to_json(worksheet);
                             
-                            const parsed = jsonData.map(row => {
-                                const dezenas = [];
-                                for (let i = 1; i <= 25; i++) {
-                                    const val = row[`Bola${i}`] || row[`B${i}`] || row[`bola${i}`];
-                                    if (val) dezenas.push(parseInt(val));
+                            // Lendo a planilha de forma crua (Matriz) para fugir das alterações de cabeçalho da Caixa
+                            const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                            const parsed = [];
+
+                            rawData.forEach(row => {
+                                if (!Array.isArray(row)) return;
+
+                                // Verifica se a primeira coluna parece ser um Concurso válido
+                                const concurso = parseInt(row[0]);
+                                if (isNaN(concurso) || concurso <= 0) return;
+
+                                // Puxa todos os números de 1 a 25 encontrados na linha
+                                const nums = row.map(v => parseInt(v)).filter(n => !isNaN(n) && n >= 1 && n <= 25);
+                                const uniqueNums = [...new Set(nums)];
+
+                                let dezenas = [];
+                                
+                                // Estrutura oficial atual: Bolas estão nas colunas 2 a 16 (índices 2 a 16)
+                                let slicedNums = row.slice(2, 17).map(v => parseInt(v)).filter(n => !isNaN(n) && n >= 1 && n <= 25);
+                                slicedNums = [...new Set(slicedNums)];
+
+                                if (slicedNums.length === 15) {
+                                    dezenas = slicedNums; // Achou exatamente as bolas nas colunas certas
+                                } else if (uniqueNums.length >= 15) {
+                                    // Backup: Pega os últimos 15 números válidos caso haja colunas extras de data
+                                    dezenas = uniqueNums.slice(-15);
                                 }
-                                if (dezenas.length < 15) {
-                                    Object.keys(row).forEach(k => {
-                                        if (!isNaN(parseInt(k)) && typeof row[k] === 'number') dezenas.push(row[k]);
+
+                                if (dezenas.length === 15) {
+                                    parsed.push({
+                                        Concurso: concurso,
+                                        Data: row[1] || '',
+                                        Dezenas: dezenas.sort((a,b) => a-b)
                                     });
                                 }
-                                return {
-                                    Concurso: parseInt(row['Concurso'] || row['concurso']),
-                                    Data: row['Data Sorteio'] || row['Data'] || row['data'],
-                                    Dezenas: dezenas.slice(0, 15).sort((a,b) => a-b)
-                                };
-                            }).filter(d => d.Dezenas.length === 15 && !isNaN(d.Concurso));
+                            });
                             
                             processData(parsed);
-                        } catch (err) { setError("Erro Excel: " + err.message); }
+                        } catch (err) { setError("Erro ao processar arquivo: " + err.message); }
                     };
                     reader.readAsArrayBuffer(file);
                 } else {
@@ -523,7 +506,6 @@
                 }
             };
 
-            // --- STATISTICS ENGINE (MODIFICADO) ---
             const stats = useMemo(() => {
                 if (!activeHistory.length) return null;
 
@@ -553,15 +535,11 @@
 
                 const sortedFreq = [...freqDetails].sort((a, b) => b.count - a.count);
 
-                // --- LÓGICA DE SEPARAÇÃO QUENTE/FRIO ---
-                // Para evitar repetição, pegamos Top 8 como Quentes e Bottom 8 como Frios.
-                // 8 Quentes + 8 Frios + 9 Neutros = 25.
                 const topCount = 8;
                 
                 const hotNumbersList = sortedFreq.slice(0, topCount);
-                const coldNumbersList = sortedFreq.slice(-topCount).reverse(); // Mais frios primeiro para visualização
+                const coldNumbersList = sortedFreq.slice(-topCount).reverse(); 
                 
-                // Sets para busca rápida O(1) na renderização das bolas
                 const hotSet = new Set(hotNumbersList.map(i => i.n));
                 const coldSet = new Set(coldNumbersList.map(i => i.n));
 
@@ -570,16 +548,15 @@
                     lastDraw: fullHistory[0], 
                     avgSum: Math.round(totalSum / totalDraws),
                     avgOdds: Math.round(totalOdds / totalDraws),
-                    hotNumbersList, // Lista Top 8
-                    coldNumbersList, // Lista Bottom 8
-                    hotSet, // Set para verificação visual
-                    coldSet, // Set para verificação visual
+                    hotNumbersList, 
+                    coldNumbersList, 
+                    hotSet, 
+                    coldSet, 
                     frequencies: freqDetails,
                     sortedFrequencies: sortedFreq
                 };
             }, [activeHistory, fullHistory]);
 
-            // --- GENERATOR LOGIC ---
             const generateGame = () => {
                 const { oddTarget, sumMin, sumMax, repeatsTarget } = genFilters;
                 const lastDrawSet = new Set(fullHistory[0]?.Dezenas || []);
@@ -616,7 +593,6 @@
                 alert("Não foi possível gerar com estes filtros restritos. Tente abrir mais as margens.");
             };
 
-            // --- SIMULATOR LOGIC ---
             const checkPerformance = (numbers) => {
                 if (!activeHistory.length) return { maxHits: 0, hitsDistribution: {} };
                 
@@ -650,7 +626,6 @@
                 }
             };
 
-            // --- NOVO: AUTO SEARCH PROFIT LOGIC ---
             const handleAutoFindProfit = async () => {
                 if (!activeHistory || activeHistory.length === 0) {
                     alert("Carregue dados primeiro.");
@@ -658,36 +633,28 @@
                 }
 
                 setIsSearchingProfit(true);
-                setClosureResult(null); // Limpar resultados anteriores
+                setClosureResult(null); 
                 setClosureSimStats(null);
 
-                // Pequeno delay para a UI renderizar o estado de "Buscando..."
                 await new Promise(resolve => setTimeout(resolve, 50));
 
-                const maxAttempts = 300; // Tenta 300 combinações aleatórias. Se não achar, para.
+                const maxAttempts = 300; 
                 let foundCombination = null;
                 const gamePrice = 3.0;
                 const prizeValues = { 11: 6, 12: 12, 13: 30, 14: 1500, 15: 1500000 };
                 const numbersNeeded = closureStrategy.numbers;
 
-                // Loop de busca
                 for (let i = 0; i < maxAttempts; i++) {
-                    // 1. Gera candidato aleatório do tamanho da estratégia
                     const allNums = Array.from({length: 25}, (_, i) => i + 1);
                     const candidate = allNums.sort(() => 0.5 - Math.random())
                                             .slice(0, numbersNeeded)
                                             .sort((a,b) => a-b);
                     
-                    // 2. Gera Matriz de Fechamento (Heavy Calc)
-                    // Nota: generateOptimizedClosure é "pesada", mas para 17/18 números é rápido o suficiente.
                     const games = generateOptimizedClosure(candidate, closureStrategy);
                     
-                    // 3. Simula Finanças
-                    let totalCost = games.length * gamePrice * activeHistory.length; // Custo * Concursos (Simulando jogar em TODOS)
+                    let totalCost = games.length * gamePrice * activeHistory.length; 
                     let totalPrizes = 0;
 
-                    // Otimização: Se o custo for absurdamente alto, nem calcula tudo (mas aqui o custo é fixo pela estratégia)
-                    // Calculamos prêmios percorrendo o histórico
                     for (let d = 0; d < activeHistory.length; d++) {
                         const draw = activeHistory[d];
                         for (let g = 0; g < games.length; g++) {
@@ -698,20 +665,16 @@
 
                     const profit = totalPrizes - totalCost;
 
-                    // 4. Critério de Parada: Lucro Positivo
                     if (profit > 0) {
                         foundCombination = candidate;
                         break;
                     }
 
-                    // A cada 10 iterações, libera a thread pro navegador não travar
                     if (i % 20 === 0) await new Promise(r => setTimeout(r, 0));
                 }
 
                 if (foundCombination) {
                     setClosureSelection(foundCombination);
-                    // Aciona a geração normal para popular a tela com os dados encontrados
-                    // Precisamos chamar a lógica, mas como o estado acabou de ser setado, vamos passar o argumento direto
                     executeClosureGeneration(foundCombination);
                 } else {
                     alert(`Não encontrei lucro positivo em ${maxAttempts} tentativas aleatórias para o filtro atual de ${activeHistory.length} concursos. Tente diminuir a quantidade de jogos analisados (Filtro 'Analisar').`);
@@ -719,7 +682,6 @@
                 }
             };
 
-            // Função separada para ser chamada tanto pelo botão "Gerar" quanto pelo "Auto Search"
             const executeClosureGeneration = (selectionToUse) => {
                 const selection = selectionToUse || closureSelection;
                 
@@ -765,7 +727,6 @@
                 }, 100);
             };
 
-            // Wrapper para o botão manual
             const handleGenerateClosure = () => executeClosureGeneration(closureSelection);
 
             const saveClosureGames = () => {
@@ -780,7 +741,6 @@
             };
 
 
-            // --- MANUAL ANALYSIS LOGIC ---
             const manualAnalysis = useMemo(() => {
                 if (manualSelection.length < 15) return null;
                 const datasetToUse = activeHistory; 
@@ -811,8 +771,6 @@
             }, [manualSelection, activeHistory]); 
 
 
-            // --- UI RENDERERS ---
-
             if (!isFileLoaded) {
                 return (
                     <div className={theme}>
@@ -824,10 +782,10 @@
                                 
                                 <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-emerald-500 to-teal-400 bg-clip-text text-transparent">LotoAnalítica Pro</h1>
                                 <p className="text-slate-500 dark:text-gray-400 mb-8 text-sm leading-relaxed">
-                                    Importe sua planilha da Lotofácil (.xlsx ou .csv) para desbloquear inteligência estatística avançada.
+                                    Importe sua planilha da Lotofácil (.xlsx, .xls ou .htm) para desbloquear inteligência estatística avançada.
                                 </p>
 
-                                <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFileUpload} ref={fileInputRef} className="hidden" />
+                                <input type="file" accept=".csv,.xlsx,.xls,.htm,.html" onChange={handleFileUpload} ref={fileInputRef} className="hidden" />
                                 
                                 <button onClick={() => fileInputRef.current.click()} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30 group">
                                     <Icon name="FileSpreadsheet" className="group-hover:scale-110 transition-transform" />
@@ -848,7 +806,6 @@
             return (
                 <div className={theme}>
                     <div className="min-h-screen pb-20 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 transition-colors duration-300">
-                        {/* TOP BAR */}
                         <div className="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-xl transition-colors">
                             <div className="max-w-7xl mx-auto px-4 py-3">
                                 <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -902,7 +859,6 @@
                                 </div>
                             </div>
 
-                            {/* NAVIGATION TABS */}
                             <div className="flex justify-center border-t border-slate-200 dark:border-slate-800 mt-2 bg-white/50 dark:bg-slate-900/50 overflow-x-auto">
                                 {[
                                     { id: 'dashboard', label: 'Dashboard', icon: 'LayoutDashboard' },
@@ -933,7 +889,6 @@
 
                         <main className="max-w-7xl mx-auto px-4 py-8">
                             
-                            {/* --- DASHBOARD TAB --- */}
                             {activeTab === 'dashboard' && stats && (
                                 <div className="space-y-8 animate-pulse-once">
                                     <div className="flex items-center justify-between">
@@ -943,7 +898,6 @@
                                         </h2>
                                     </div>
 
-                                    {/* KPI Cards */}
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                         <StatCard title="Média Soma" value={stats.avgSum} subtext="Padrão: 180-220" color="blue" />
                                         <StatCard title="Média Ímpares" value={stats.avgOdds} subtext="Padrão: 7-9" color="purple" />
@@ -951,13 +905,10 @@
                                         <StatCard title="Número + Frio" value={stats.coldNumbersList[0].n} subtext={`Saiu ${stats.coldNumbersList[0].count}x (${stats.coldNumbersList[0].percent}%)`} color="red" />
                                     </div>
 
-                                    {/* Main Charts Area */}
                                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                        {/* Chart: Frequency */}
                                         <div className="lg:col-span-2 glass-panel p-6 rounded-xl">
                                             <h3 className="text-slate-800 dark:text-white font-semibold mb-6">Frequência dos Números (Período Selecionado)</h3>
                                             <div className="h-48 flex items-end gap-1 relative">
-                                                {/* Grid lines */}
                                                 <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-10">
                                                     <div className="border-t border-slate-500 dark:border-white w-full"></div>
                                                     <div className="border-t border-slate-500 dark:border-white w-full"></div>
@@ -980,7 +931,6 @@
                                                                 `}
                                                                 style={{ height: `${height}%` }}
                                                             >
-                                                                {/* Tooltip */}
                                                                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-black text-white text-xs p-2 rounded whitespace-nowrap z-20 border border-slate-700 shadow-xl">
                                                                     <strong>Bola {item.n}</strong><br/>
                                                                     {item.count} vezes<br/>
@@ -996,7 +946,6 @@
                                             </div>
                                         </div>
 
-                                        {/* Last Draw Card */}
                                         <div className="glass-panel p-6 rounded-xl flex flex-col justify-between">
                                             <div>
                                                 <div className="flex justify-between items-start mb-4">
@@ -1024,9 +973,7 @@
                                         </div>
                                     </div>
 
-                                    {/* --- NOVA SEÇÃO: DETALHAMENTO TOP 8 HOT & COLD (SEM SOBREPOSIÇÃO) --- */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        {/* Hot 8 */}
                                         <div className="glass-panel p-6 rounded-xl border-t-4 border-red-500 shadow-neon-red">
                                             <div className="flex items-center gap-2 mb-6">
                                                 <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg text-red-500">
@@ -1049,7 +996,6 @@
                                             </div>
                                         </div>
 
-                                        {/* Cold 8 */}
                                         <div className="glass-panel p-6 rounded-xl border-t-4 border-blue-500">
                                             <div className="flex items-center gap-2 mb-6">
                                                 <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-500">
@@ -1076,12 +1022,10 @@
                                 </div>
                             )}
 
-                            {/* --- TAB: FECHAMENTOS INTELIGENTES (NEW!) --- */}
                             {activeTab === 'closure' && (
                                 <div className="animate-pulse-once space-y-8">
                                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                                         
-                                        {/* COL 1: CONFIGURATOR */}
                                         <div className="glass-panel p-6 rounded-xl border border-emerald-500/30 h-fit">
                                             <div className="mb-6 border-b border-slate-200 dark:border-slate-700 pb-4">
                                                 <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2 mb-2">
@@ -1093,7 +1037,6 @@
                                                 </p>
                                             </div>
 
-                                            {/* Strategy Selector */}
                                             <div className="mb-6">
                                                 <label className="block text-xs font-bold text-slate-700 dark:text-gray-300 mb-2 uppercase">Estratégia de Redução</label>
                                                 <select 
@@ -1101,7 +1044,7 @@
                                                     onChange={(e) => {
                                                         const s = CLOSURE_STRATEGIES.find(x => x.id == e.target.value);
                                                         setClosureStrategy(s);
-                                                        setClosureResult(null); // Reset results
+                                                        setClosureResult(null);
                                                     }}
                                                     className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white rounded-lg p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                                                 >
@@ -1115,7 +1058,6 @@
                                                 </div>
                                             </div>
 
-                                            {/* Number Selector */}
                                             <div className="mb-6">
                                                 <div className="flex justify-between items-center mb-3">
                                                     <label className="text-xs font-bold text-slate-700 dark:text-gray-300 uppercase">Selecione seus números</label>
@@ -1149,7 +1091,6 @@
                                                         Surpresinha (Quentes)
                                                     </button>
                                                     
-                                                    {/* --- BOTAO NOVO: BUSCA AUTOMATICA --- */}
                                                     <button 
                                                         onClick={handleAutoFindProfit} 
                                                         disabled={isSearchingProfit || isGeneratingClosure}
@@ -1160,7 +1101,6 @@
                                                 </div>
                                             </div>
 
-                                            {/* Action Button */}
                                             <button 
                                                 onClick={handleGenerateClosure}
                                                 disabled={isGeneratingClosure || isSearchingProfit || closureSelection.length !== closureStrategy.numbers}
@@ -1178,10 +1118,8 @@
                                             </button>
                                         </div>
 
-                                        {/* COL 2 & 3: RESULTS AREA */}
                                         <div className="lg:col-span-2 space-y-6">
                                             
-                                            {/* Intro State */}
                                             {!closureResult && !isGeneratingClosure && !isSearchingProfit && (
                                                 <div className="h-full flex flex-col items-center justify-center glass-panel p-10 rounded-xl text-center text-slate-400 dark:text-gray-500 border-2 border-dashed border-slate-300 dark:border-slate-700 opacity-60">
                                                     <Icon name="Grid" size={64} className="mb-4 opacity-30" />
@@ -1190,7 +1128,6 @@
                                                 </div>
                                             )}
 
-                                            {/* Loading Search State */}
                                             {isSearchingProfit && (
                                                 <div className="h-full flex flex-col items-center justify-center glass-panel p-10 rounded-xl text-center text-violet-500 border-2 border-dashed border-violet-500/30">
                                                     <div className="loader w-12 h-12 border-4 border-violet-200 border-t-violet-600 mb-6"></div>
@@ -1201,7 +1138,6 @@
                                                 </div>
                                             )}
 
-                                            {/* FINANCIAL SIMULATION CARD */}
                                             {closureSimStats && !isSearchingProfit && (
                                                 <div className="glass-panel p-6 rounded-xl border-l-4 border-amber-500 relative overflow-hidden animate-pulse-once">
                                                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 relative z-10">
@@ -1241,7 +1177,6 @@
                                                 </div>
                                             )}
 
-                                            {/* Generated Games List */}
                                             {closureResult && !isSearchingProfit && (
                                                 <div className="glass-panel p-6 rounded-xl">
                                                     <div className="flex justify-between items-center mb-6">
@@ -1283,10 +1218,8 @@
                                 </div>
                             )}
 
-                            {/* --- MANUAL ANALYSIS TAB --- */}
                             {activeTab === 'manual' && (
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-pulse-once">
-                                    {/* Selector */}
                                     <div className="glass-panel p-6 rounded-xl border border-emerald-500/30">
                                         <div className="flex justify-between items-center mb-4">
                                             <h2 className="text-lg font-bold text-slate-800 dark:text-white">Seletor da Cartela</h2>
@@ -1346,7 +1279,6 @@
                                         )}
                                     </div>
 
-                                    {/* Results */}
                                     <div className="lg:col-span-2 space-y-6">
                                         {manualSelection.length < 15 ? (
                                             <div className="h-full flex flex-col items-center justify-center glass-panel p-10 rounded-xl text-center text-slate-400 dark:text-gray-500 border-2 border-dashed border-slate-300 dark:border-slate-700">
@@ -1355,7 +1287,6 @@
                                             </div>
                                         ) : (
                                             <>
-                                                {/* Prize History Card */}
                                                 <div className="glass-panel p-6 rounded-xl">
                                                     <h3 className="text-slate-800 dark:text-white font-bold mb-4 flex items-center gap-2">
                                                         <Icon name="History" className="text-amber-500" />
@@ -1376,7 +1307,6 @@
                                                     </div>
                                                 </div>
 
-                                                {/* Individual Stats Grid */}
                                                 <div className="glass-panel p-6 rounded-xl">
                                                     <h3 className="text-slate-800 dark:text-white font-bold mb-4">Análise Individual no Período</h3>
                                                     <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
@@ -1393,7 +1323,6 @@
                                                     </div>
                                                 </div>
                                                 
-                                                {/* Prizes Log */}
                                                 <div className="glass-panel p-6 rounded-xl border-t-4 border-emerald-500 mt-6">
                                                     <h3 className="text-slate-800 dark:text-white font-bold mb-4 flex items-center gap-2">
                                                         <Icon name="Database" className="text-emerald-500" />
@@ -1455,7 +1384,6 @@
                                 </div>
                             )}
 
-                            {/* --- GENERATOR TAB --- */}
                             {activeTab === 'generator' && (
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                                     <div className="glass-panel p-6 rounded-xl h-fit">
@@ -1542,7 +1470,6 @@
                                 </div>
                             )}
 
-                            {/* --- SAVED TAB --- */}
                             {activeTab === 'saved' && (
                                 <div>
                                     <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Jogos Salvos ({savedGames.length})</h2>
